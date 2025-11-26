@@ -1,0 +1,10 @@
+ccxt
+requests
+schedule
+openai
+openai
+pandas
+schedule
+python-dotenv
+requests
+urllib3
