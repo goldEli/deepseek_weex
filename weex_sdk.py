@@ -225,6 +225,49 @@ class WeexClient:
             print(f"错误堆栈: {traceback.format_exc()}")
             return None
     
+    def set_leverage(self, symbol, margin_mode, long_leverage=None, short_leverage=None):
+        """
+        调整合约杠杆倍数
+        参考文档: https://api-contract.weex.com/capi/v2/account/leverage
+        
+        Args:
+            symbol (str): 合约交易对，例如 "cmt_bchusdt"
+            margin_mode (int): 保证金模式，1表示逐仓，0表示全仓
+            long_leverage (str, optional): 多头杠杆倍数，例如 "2"
+            short_leverage (str, optional): 空头杠杆倍数，例如 "2"
+            
+        Returns:
+            dict: API响应数据
+        """
+        # 设置API路径
+        request_path = "/capi/v2/account/leverage"
+        
+        # 构建请求数据
+        data = {
+            "symbol": symbol,
+            "marginMode": margin_mode
+        }
+        
+        # 添加可选参数
+        if long_leverage is not None:
+            data["longLeverage"] = long_leverage
+        if short_leverage is not None:
+            data["shortLeverage"] = short_leverage
+        
+        try:
+            # 发送POST请求，需要签名
+            print(f"尝试设置{symbol}的杠杆倍数，保证金模式: {margin_mode}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
+            print(f"杠杆设置响应: {response}")
+            return response
+        except Exception as e:
+            print(f"设置杠杆倍数时出错: {str(e)}")
+            return None
+    
     def get_coin_balance(self, coin_symbol="USDT"):
         """
         获取指定币种的余额
@@ -261,15 +304,16 @@ class WeexClient:
 
 
 # 测试用例函数
-def test_get_account_balance():
+def test_weex_client():
     """
-    测试获取账户余额的功能
+    测试WEEX客户端的所有功能
     
     这个测试函数会:
     1. 检查必要的环境变量是否设置
     2. 创建WeexClient实例
-    3. 调用get_account_balance()方法
-    4. 打印返回的账户资产信息
+    3. 测试账户资产查询功能
+    4. 测试杠杆调整功能
+    5. 打印测试结果
     
     使用方法:
     设置环境变量后运行:
@@ -342,6 +386,28 @@ def test_get_account_balance():
         else:
             print("  未找到USDT资产或获取失败")
         
+        # 测试set_leverage方法
+        print("\n测试杠杆调整功能...")
+        # 注意：这里使用示例合约交易对，实际使用时请根据需要修改
+        test_symbol = "cmt_bchusdt"
+        leverage_response = client.set_leverage(
+            symbol=test_symbol,
+            margin_mode=1,  # 1表示逐仓模式
+            long_leverage="2",  # 设置多头杠杆为2倍
+            short_leverage="2"  # 设置空头杠杆为2倍（API要求必须同时提供）
+        )
+        
+        if leverage_response:
+            print(f"  杠杆设置响应: {leverage_response}")
+            # 检查响应中是否包含成功信息
+            if isinstance(leverage_response, dict):
+                if leverage_response.get("code") in ["200", 200, "0", 0] or leverage_response.get("msg") == "success":
+                    print("  杠杆设置成功!")
+                else:
+                    print("  杠杆设置可能失败，请检查响应")
+        else:
+            print("  杠杆设置请求失败")
+        
         return True
     except Exception as e:
         print(f"\n测试处理失败: {str(e)}")
@@ -352,7 +418,7 @@ def test_get_account_balance():
 # 运行测试用例
 if __name__ == "__main__":
     print("开始测试WEEX API客户端...")
-    success = test_get_account_balance()
+    success = test_weex_client()
     
     if success:
         print("\n测试完成，所有功能正常!")
