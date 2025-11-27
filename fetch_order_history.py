@@ -132,15 +132,15 @@ def display_orders(orders, verbose=False):
     
     # 显示摘要信息
     print("\n[INFO] 订单摘要:")
-    print("-" * 100)
-    print(f"{'订单ID':<20} {'交易对':<15} {'类型':<8} {'状态':<10} {'数量':<10} {'价格':<15} {'创建时间':<20}")
-    print("-" * 100)
+    print("-" * 120)
+    print(f"{'订单ID':<20} {'交易对':<15} {'类型':<8} {'状态':<10} {'数量':<10} {'价格':<15} {'总盈亏':<15} {'创建时间':<20}")
+    print("-" * 120)
     
     for order in orders[:10]:  # 只显示前10条的摘要
         formatted = format_order_data(order)
         print(f"{formatted['订单ID'][:18]:<20} {formatted['交易对']:<15} {formatted['订单类型']:<8} "
               f"{formatted['订单状态']:<10} {formatted['订单数量']:<10} {formatted['订单价格']:<15} "
-              f"{formatted['创建时间']:<20}")
+              f"{formatted['总盈亏']:<15} {formatted['创建时间']:<20}")
     
     if len(orders) > 10:
         print(f"... 还有 {len(orders) - 10} 条订单未显示")
