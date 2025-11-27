@@ -485,6 +485,77 @@ class WeexClient:
         except Exception as e:
             print(f"创建市价单时出错: {str(e)}")
             return None
+    
+    def get_order_history(self, symbol=None, page_size=10, create_date=None):
+        """
+        获取历史订单
+        参考文档: https://www.weex.com/api-doc/contract/Transaction_API/GetOrderHistory
+        
+        Args:
+            symbol (str, optional): 交易对，例如 "cmt_bchusdt"
+            page_size (int, optional): 每页数量，默认为10
+            create_date (int, optional): 天数，必须≤90且不能为负数
+            
+        Returns:
+            list: 历史订单列表，每个订单包含以下字段:
+                - symbol: 交易对
+                - size: 订单数量
+                - client_oid: 客户端标识符
+                - createTime: 创建时间
+                - filled_qty: 已成交数量
+                - fee: 交易费用
+                - order_id: 订单ID
+                - price: 订单价格
+                - price_avg: 平均成交价格
+                - status: 订单状态
+                - type: 订单类型
+                - order_type: 订单类型
+                - totalProfits: 总盈亏
+                - contracts: 合约单位的订单大小
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/history"
+            
+            # 构建查询参数
+            params = {}
+            if symbol:
+                params["symbol"] = symbol
+            
+            params["pageSize"] = page_size
+            
+            if create_date is not None:
+                # 验证create_date参数
+                if create_date < 0:
+                    raise ValueError("create_date不能为负数")
+                if create_date > 90:
+                    raise ValueError("create_date不能超过90天")
+                params["createDate"] = create_date
+            
+            # 发送GET请求，需要签名
+            print(f"尝试获取历史订单{'' if symbol is None else f'，交易对: {symbol}'}，每页{page_size}条")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("GET", request_path, params=params, need_sign=True, headers=custom_headers)
+            
+            # 处理响应数据
+            # API返回的是订单列表
+            orders = []
+            if isinstance(response, list):
+                orders = response
+                print(f"成功获取{len(orders)}条历史订单")
+            else:
+                print(f"警告: 响应格式不正确，期望列表类型，收到 {type(response).__name__}")
+            
+            return orders
+        except Exception as e:
+            print(f"获取历史订单时出错: {str(e)}")
+            # 打印更详细的错误信息
+            import traceback
+            print(f"错误堆栈: {traceback.format_exc()}")
+            return []
 
 
 # 测试用例函数
