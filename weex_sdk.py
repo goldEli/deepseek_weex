@@ -172,6 +172,53 @@ class WeexClient:
                     print(f"错误响应: {e.response.text}")
             raise
     
+    def get_account_assets(self):
+        """
+        获取账户资产信息
+        参考文档: https://api-contract.weex.com/capi/v2/account/assets
+        
+        Returns:
+            list: 账户资产列表，每个资产包含以下字段:
+                - coinId: 币种ID
+                - coinName: 币种名称
+                - available: 可用余额
+                - frozen: 冻结余额
+                - equity: 总权益
+                - unrealizePnl: 未实现盈亏
+        """
+        # 使用合约账户API路径，根据curl命令示例
+        request_path = "/capi/v2/account/assets"
+        
+        try:
+            # 尝试获取合约账户信息，使用正确的签名方式
+            print(f"尝试访问合约账户资产路径: {request_path}")
+            # 添加必要的请求头
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            # 需要签名验证
+            response = self._request("GET", request_path, params={}, need_sign=True, headers=custom_headers)
+            
+            print(f"API响应: {response}")
+            # 检查响应是否为列表类型
+            if isinstance(response, list):
+                # API直接返回资产列表
+                return response
+            else:
+                print(f"警告: 响应格式不是列表，收到 {type(response).__name__}")
+                # 如果是字典类型并且包含data字段，尝试获取data
+                if isinstance(response, dict) and 'data' in response:
+                    return response['data']
+                # 返回空列表作为默认值
+                return []
+        except Exception as e:
+            print(f"获取账户资产信息时出错: {str(e)}")
+            # 打印更详细的错误信息
+            import traceback
+            print(f"错误堆栈: {traceback.format_exc()}")
+            return []
+    
     def get_account_balance(self):
         """
         获取账户资产信息
