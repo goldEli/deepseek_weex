@@ -2,11 +2,13 @@ import os
 import time
 import schedule
 from openai import OpenAI
-import ccxt
 import pandas as pd
 from datetime import datetime
 import json
 from dotenv import load_dotenv
+
+# 导入我们的WEEX SDK
+from weex_sdk import WeexClient
 
 load_dotenv()
 
@@ -20,19 +22,17 @@ deepseek_client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
-# 初始化OKX交易所
-exchange = ccxt.okx({
-    'options': {
-        'defaultType': 'swap',  # OKX使用swap表示永续合约
-    },
-    'apiKey': os.getenv('OKX_API_KEY'),
-    'secret': os.getenv('OKX_SECRET'),
-    'password': os.getenv('OKX_PASSWORD'),  # OKX需要交易密码
-})
+# 初始化WEEX交易所客户端
+exchange = WeexClient(
+    api_key=WEEX_API_KEY,
+    api_secret=WEEX_SECRET,
+    api_passphrase=WEEX_ACCESS_PASSPHRASE,
+    testnet=False  # 使用主网API
+)
 
 # 交易参数配置
 TRADE_CONFIG = {
-    'symbol': 'BTC/USDT:USDT',  # OKX的合约符号格式
+    'symbol': 'cmt_btcusdt',  # WEEX的合约符号格式
     'amount': 0.01,  # 交易数量 (BTC)
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用15分钟K线
@@ -48,22 +48,20 @@ position = None
 def setup_exchange():
     """设置交易所参数"""
     try:
-        # OKX设置杠杆
+        # WEEX设置杠杆 - 使用我们的set_leverage方法
+        # 1表示逐仓模式，0表示全仓模式
+        margin_mode = 0  # 全仓模式
         exchange.set_leverage(
-            TRADE_CONFIG['leverage'],
-            TRADE_CONFIG['symbol'],
-            {'mgnMode': 'cross'}  # 全仓模式，也可用'isolated'逐仓
+            symbol=TRADE_CONFIG['symbol'],
+            margin_mode=margin_mode,
+            long_leverage=str(TRADE_CONFIG['leverage']),
+            short_leverage=str(TRADE_CONFIG['leverage'])
         )
         print(f"设置杠杆倍数: {TRADE_CONFIG['leverage']}x")
 
-        # 获取余额
-        balance = exchange.fetch_balance()
-        usdt_balance = balance['USDT']['free']
+        # 获取USDT余额 - 使用我们的get_coin_balance方法
+        usdt_balance = exchange.get_coin_balance('USDT')
         print(f"当前USDT余额: {usdt_balance:.2f}")
-
-        # # 设置持仓模式 (双向持仓)
-        # exchange.set_position_mode(False, TRADE_CONFIG['symbol'])
-        # print("设置单向持仓")
 
         return True
     except Exception as e:
@@ -74,7 +72,7 @@ def setup_exchange():
 def get_btc_ohlcv():
     """获取BTC/USDT的K线数据"""
     try:
-        # 获取最近10根K线
+        # 获取最近10根K线 - 使用我们的fetch_ohlcv方法
         ohlcv = exchange.fetch_ohlcv(TRADE_CONFIG['symbol'], TRADE_CONFIG['timeframe'], limit=10)
 
         # 转换为DataFrame
@@ -102,21 +100,19 @@ def get_btc_ohlcv():
 def get_current_position():
     """获取当前持仓情况"""
     try:
-        positions = exchange.fetch_positions([TRADE_CONFIG['symbol']])
+        # 获取持仓 - 使用我们的fetch_positions方法
+        positions = exchange.fetch_positions(TRADE_CONFIG['symbol'])
 
         for pos in positions:
-            if pos['symbol'] == TRADE_CONFIG['symbol']:
-                contracts = float(pos['contracts']) if pos['contracts'] else 0
-
-                if contracts > 0:
-                    return {
-                        'side': pos['side'],  # 'long' or 'short'
-                        'size': contracts,
-                        'entry_price': float(pos['entryPrice']) if pos['entryPrice'] else 0,
-                        'unrealized_pnl': float(pos['unrealizedPnl']) if pos['unrealizedPnl'] else 0,
-                        'leverage': float(pos['leverage']) if pos['leverage'] else TRADE_CONFIG['leverage'],
-                        'symbol': pos['symbol']
-                    }
+            if pos['symbol'] == TRADE_CONFIG['symbol'] and pos['size'] > 0:
+                return {
+                    'side': pos['side'],  # 'long' or 'short'
+                    'size': pos['size'],
+                    'entry_price': pos['entryPrice'],
+                    'unrealized_pnl': pos['unrealizedPnl'],
+                    'leverage': pos['leverage'],
+                    'symbol': pos['symbol']
+                }
 
         return None
 
@@ -253,28 +249,26 @@ def execute_trade(signal_data, price_data):
         if signal_data['signal'] == 'BUY':
             if current_position and current_position['side'] == 'short':
                 print("平空仓并开多仓...")
-                # 平空仓
+                # 平空仓 - 使用我们的create_market_order方法
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'buy',
                     current_position['size'],
-                    params={'reduceOnly': True, 'tag': 'f1ee03b510d5SUDE'}
+                    reduce_only=True  # 使用reduce_only参数表示平仓
                 )
                 time.sleep(1)
                 # 开多仓
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'buy',
-                    TRADE_CONFIG['amount'],
-                    params={'tag': 'f1ee03b510d5SUDE'}
+                    TRADE_CONFIG['amount']
                 )
             elif not current_position:
                 print("开多仓...")
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'buy',
-                    TRADE_CONFIG['amount'],
-                    params={'tag': 'f1ee03b510d5SUDE'}
+                    TRADE_CONFIG['amount']
                 )
             else:
                 print("已持有多仓，无需操作")
@@ -287,23 +281,21 @@ def execute_trade(signal_data, price_data):
                     TRADE_CONFIG['symbol'],
                     'sell',
                     current_position['size'],
-                    params={'reduceOnly': True, 'tag': 'f1ee03b510d5SUDE'}
+                    reduce_only=True  # 使用reduce_only参数表示平仓
                 )
                 time.sleep(1)
                 # 开空仓
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'sell',
-                    TRADE_CONFIG['amount'],
-                    params={'tag': 'f1ee03b510d5SUDE'}
+                    TRADE_CONFIG['amount']
                 )
             elif not current_position:
                 print("开空仓...")
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'sell',
-                    TRADE_CONFIG['amount'],
-                    params={'tag': 'f1ee03b510d5SUDE'}
+                    TRADE_CONFIG['amount']
                 )
             else:
                 print("已持有空仓，无需操作")

@@ -8,179 +8,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# 定义缺失的方法 已经添加 curl 参考
-# 定义缺失的方法 - 需要用户提供curl参考来实现以下功能：
-# 1. fetch_ohlcv - 获取K线数据（对应exchange.fetch_ohlcv）
-# 参考“ curl "https://api-contract.weex.com/capi/v2/market/candles?symbol=cmt_bchusdt&granularity=1m&startTime=1716707460000&endTime=1816707460000"”
-
-# Request parameters
-# symbol	String	Yes	Trading pair
-# granularity	String	Yes	Candlestick interval[1m,5m,15m,30m,1h,4h,12h,1d,1w]
-# limit	Integer	No	Default: 100
-# priceType	String	No	Price Type : LAST latest market price; MARK mark; INDEX index;
-# LAST by default
-
-# Response parameters
-
-# Parameter	Type	Description
-# [	array	array
-# [	array	array
-# > string	string	Candlestick time
-# > string	string	Opening price
-# > string	string	Highest price
-# > string	string	Lowest price
-# > string	string	Closing price
-# > string	string	Trading size
-# > string	string	Trading volume
-# ]	array	array
-# ]	array	array
-
-
-# Response example
-
-# [
-#     [
-#         "1716707460000",//Candlestick time
-#         "69174.3",//Opening price
-#         "69174.4",//Highest price
-#         "69174.1",//Lowest price
-#         "69174.3",//Closing price
-#         "0", //Trading size
-#         "0.011" //Trading volume
-#     ]
-# ]
-
-# ------------------------------
-# 2. fetch_positions - 获取持仓情况（对应exchange.fetch_positions）
-# 参考 
-# curl "https://api-contract.weex.com/capi/v2/account/position/allPosition" \
-#    -H "ACCESS-KEY:*******" \
-#    -H "ACCESS-SIGN:*******" \
-#    -H "ACCESS-PASSPHRASE:*****" \
-#    -H "ACCESS-TIMESTAMP:1659076670000" \
-#    -H "locale:zh-CN" \
-#    -H "Content-Type: application/json"
-
-# Response parameters
-
-# Parameter	Type	Description
-# id	Long	Position ID
-# account_id	Long	Associated account ID
-# coin_id	Integer	Associated collateral currency ID
-# contract_id	Long	Associated futures ID
-# symbol	String	Trading pair
-# side	String	Position direction such as Long or short
-# margin_mode	String	Margin mode of current position
-# SHARED: Cross Mode
-# ISOLATED: Isolated Mode
-# separated_mode	String	Current position's separated mode
-# COMBINED: Combined mode
-# SEPARATED: Separated mode
-# separated_open_order_id	Long	Opening order ID of separated position
-# leverage	String	Position leverage
-# size	String	Current position size
-# open_value	String	Initial value at position opening
-# open_fee	String	Opening fee
-# funding_fee	String	Funding fee
-# isolated_margin	String	Isolated margin
-# is_auto_append_isolated_margin	boolean	Whether the auto-adding of funds for the isolated margin is enabled (only for isolated mode)
-# cum_open_size	String	Accumulated opened positions
-# cum_open_value	String	Accumulated value of opened positions
-# cum_open_fee	String	Accumulated fees paid for opened positions
-# cum_close_size	String	Accumulated closed positions
-# cum_close_value	String	Accumulated value of closed positions
-# cum_close_fee	String	Accumulated fees paid for closing positions
-# cum_funding_fee	String	Accumulated settled funding fees
-# cum_liquidate_fee	String	Accumulated liquidation fees
-# created_match_sequence_id	Long	Matching engine sequence ID at creation
-# updated_match_sequence_id	Long	Matching engine sequence ID at last update
-# created_time	Long	Creation time
-# updated_time	Long	Update time
-# contractVal	String	Futures face value
-# unrealizePnl	String	Unrealized PnL
-# liquidatePrice	String	Estimated liquidation price
-# If the value = 0, it means the position is at low risk and there is no liquidation price at this time
-
-# Response example
-
-# [
-#     {
-#         "id": 0,
-#         "account_id": 0,
-#         "coin_id": 2,
-#         "contract_id": 10000002,
-#         "side": "Long",
-#         "margin_mode": "SHARED",
-#         "separated_mode": "COMBINED",
-#         "separated_open_order_id": 0,
-#         "leverage": "1",
-#         "size": "0.",
-#         "open_value": "0",
-#         "open_fee": "0.000000",
-#         "funding_fee": "0.000001",
-#         "isolated_margin": "0",
-#         "is_auto_append_isolated_margin": false,
-#         "cum_open_size": "0",
-#         "cum_open_value": "09",
-#         "cum_open_fee": "0.000000",
-#         "cum_close_size": "0",
-#         "cum_close_value": "0",
-#         "cum_close_fee": "0.000000",
-#         "cum_funding_fee": "0",
-#         "cum_liquidate_fee": "0",
-#         "created_match_sequence_id": 0,
-#         "updated_match_sequence_id": 0,
-#         "created_time": 1708395319042,
-#         "updated_time": 1713341325556
-#     }
-# ]
-
-# ------------------------------
-# 3. create_market_order - 创建市价单（对应exchange.create_market_order）
-# 参考
-# curl -X POST "https://api-contract.weex.com/capi/v2/order/placeOrder" \
-#    -H "ACCESS-KEY:*******" \
-#    -H "ACCESS-SIGN:*" \
-#    -H "ACCESS-PASSPHRASE:*" \
-#    -H "ACCESS-TIMESTAMP:1659076670000" \
-#    -H "locale:zh-CN" \
-#    -H "Content-Type: application/json" \
-#    -d '{"symbol": "cmt_bchusdt","client_oid": "111111111222222","size": "1","type": "1","order_type": "0",
-#      "match_price": "0","price": "100","presetTakeProfitPrice": "105","presetStopLossPrice": "95"}'
-
-# Request parameters
-
-# Parameter	Type	Required?	Description
-# symbol	String	Yes	Trading pair
-# client_oid	String	Yes	Custom order ID (no more than 40 characters)
-# size	String	Yes	Order quantity (cannot be zero or negative).
-# type	String	Yes	1: Open long, 2: Open short, 3: Close long, 4: Close short
-# order_type	String	Yes	0: Normal, 1: Post-Only, 2: Fill-Or-Kill, 3: Immediate Or Cancel
-# match_price	String	Yes	0: Limit price, 1: Market price
-# price	String	Yes	Order price (this is required for limit orders, and its accuracy and step size follow the futures information endpoint)
-# presetTakeProfitPrice	BigDecimal	No	Preset take-profit price
-# presetStopLossPrice	BigDecimal	No	Preset stop-loss price
-# marginMode	Integer	No	Margin mode
-# 1: Cross Mode
-# 3: Isolated Mode
-# Default is 1 (Cross Mode)
-# separatedMode	Integer	No	Position segregation mode
-# 1: Combined mode
-# 2: Separated mode
-# Default is 1 (Combined mode)
-
-# Response parameters
-
-# Parameter	Type	Description
-# client_oid	string	Client-generated order identifier
-# order_id	string	Order ID
-
-# {
-# 	"client_oid": null,
-# 	"order_id": "596471064624628269"
-# }
-
-# ------------------end-------------------
 
 # 环境变量配置
 WEEX_API_KEY = os.getenv('WEEX_API_KEY')
@@ -208,14 +35,14 @@ class WeexClient:
         self.api_passphrase = api_passphrase
         
         # 使用合约API专用域名
-        self.base_url = "https://api-contract.weex.com" if not testnet else "https://api-testnet.weex.com"
+        self.base_url = "https://api-contract.weex.com" if not testnet else "https://api-contract.weex.com"
             
         self.timeout = 10  # 请求超时时间（秒）
     
     def _sign(self, timestamp, method, request_path, data=None, params=None):
         """
         生成API签名
-        根据官方文档: https://www.weex.com/api-doc/ai/QuickStart/Signature
+        根据官方示例代码实现
         
         Args:
             timestamp (str): 时间戳
@@ -229,44 +56,36 @@ class WeexClient:
         """
         import base64
         
-        # 构建签名内容，严格按照WEEX API要求
-        method = method.upper()
-        
-        # 处理查询字符串
+        # 构建查询字符串
         query_string = ''
         if params:
-            # 按照官方文档要求构建查询字符串
-            # 注意：这里需要保持参数的顺序和格式
-            query_items = []
-            for key, value in sorted(params.items()):
-                query_items.append(f"{key}={value}")
-            if query_items:
-                query_string = '&'.join(query_items)
+            # 对查询参数进行排序，确保一致性
+            sorted_params = sorted(params.items())
+            query_string = '?' + '&'.join([f"{k}={v}" for k, v in sorted_params])
         
-        # 处理请求体
-        body = ''
-        if method != 'GET' and data:
-            # 确保按照合约API要求格式化数据
-            body = json.dumps(data, separators=(',', ':'))
-        
-        # 构建签名消息
-        if query_string:
-            message = f"{timestamp}{method}{request_path}?{query_string}{body}"
+        # 根据HTTP方法选择不同的签名方式
+        if method.upper() == 'GET':
+            # GET请求的签名方式
+            message = timestamp + method.upper() + request_path + query_string
         else:
-            message = f"{timestamp}{method}{request_path}{body}"
+            # POST/DELETE请求的签名方式
+            body = json.dumps(data) if data else ''
+            message = timestamp + method.upper() + request_path + query_string + body
+        
         print(f"签名消息: {message}")  # 调试信息
         
         # 使用HMAC-SHA256算法生成签名
-        hmac_obj = hmac.new(
+        signature = hmac.new(
             self.api_secret.encode('utf-8'),
             message.encode('utf-8'),
             hashlib.sha256
-        )
-        # 按照官方文档要求进行BASE64编码
-        signature = base64.b64encode(hmac_obj.digest()).decode('utf-8')
-        print(f"生成的签名: {signature}")  # 调试信息
+        ).digest()
         
-        return signature
+        # 按照官方文档要求进行BASE64编码
+        signature_b64 = base64.b64encode(signature).decode('utf-8')
+        print(f"生成的签名: {signature_b64}")  # 调试信息
+        
+        return signature_b64
     
     def _request(self, method, request_path, params=None, data=None, need_sign=True, headers=None):
         """
@@ -313,7 +132,7 @@ class WeexClient:
             # 生成签名（包含查询参数）
             signature = self._sign(timestamp, method, request_path, data, params)
             
-            # 添加认证相关的请求头
+            # 添加认证相关的请求头，使用官方推荐的头名称
             headers['ACCESS-KEY'] = self.api_key
             headers['ACCESS-SIGN'] = signature
             headers['ACCESS-PASSPHRASE'] = self.api_passphrase
@@ -475,6 +294,196 @@ class WeexClient:
         except Exception as e:
             print(f"获取{coin_symbol}余额时出错: {str(e)}")
             return 0.0
+    
+    def fetch_ohlcv(self, symbol, timeframe, since=None, limit=100):
+        """
+        获取K线数据
+        对应OKX SDK的exchange.fetch_ohlcv方法
+        
+        Args:
+            symbol (str): 交易对，如 "cmt_bchusdt"
+            timeframe (str): K线周期，如 "1m", "5m", "1h", "1d"
+            since (int, optional): 开始时间戳（毫秒）
+            limit (int, optional): 数据条数，默认100
+            
+        Returns:
+            list: K线数据列表，每条数据格式为[时间戳, 开盘价, 最高价, 最低价, 收盘价, 成交量]
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/market/candles"
+            
+            # 构建查询参数
+            params = {
+                "symbol": symbol,
+                "granularity": timeframe,
+                "limit": limit
+            }
+            
+            # 添加可选参数
+            if since is not None:
+                params["startTime"] = since
+                # 如果提供了开始时间，可以设置一个合理的结束时间
+                # 例如当前时间加上一段时间
+                params["endTime"] = int(time.time() * 1000)
+            
+            # 发送GET请求，不需要签名（公开API）
+            print(f"尝试获取{symbol}的{timeframe} K线数据，限制{limit}条")
+            response = self._request("GET", request_path, params=params, need_sign=False)
+            
+            # 处理响应数据
+            # 响应格式: [[时间戳, 开盘价, 最高价, 最低价, 收盘价, 交易量, 成交额], ...]
+            # 转换为CCXT兼容格式: [时间戳, 开盘价, 最高价, 最低价, 收盘价, 成交量]
+            ohlcv_data = []
+            if isinstance(response, list):
+                for candle in response:
+                    if len(candle) >= 7:
+                        # 转换为float类型并重新排列
+                        ohlcv_data.append([
+                            int(candle[0]),  # 时间戳
+                            float(candle[1]),  # 开盘价
+                            float(candle[2]),  # 最高价
+                            float(candle[3]),  # 最低价
+                            float(candle[4]),  # 收盘价
+                            float(candle[6])  # 成交量（使用成交额）
+                        ])
+            
+            print(f"成功获取{len(ohlcv_data)}条K线数据")
+            return ohlcv_data
+        except Exception as e:
+            print(f"获取K线数据时出错: {str(e)}")
+            return []
+    
+    def fetch_positions(self, symbol=None):
+        """
+        获取持仓情况
+        对应OKX SDK的exchange.fetch_positions方法
+        
+        Args:
+            symbol (str, optional): 交易对，如 "cmt_bchusdt"，不提供则获取所有持仓
+            
+        Returns:
+            list: 持仓列表，每个持仓包含详细信息
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/account/position/allPosition"
+            
+            # 构建查询参数
+            params = {}
+            if symbol is not None:
+                params["symbol"] = symbol
+            
+            # 发送GET请求，需要签名
+            print(f"尝试获取持仓情况{'' if symbol is None else f'，交易对: {symbol}'}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("GET", request_path, params=params, need_sign=True, headers=custom_headers)
+            
+            # 处理响应数据
+            positions = []
+            if isinstance(response, list):
+                for pos in response:
+                    # 转换为CCXT兼容的格式
+                    position = {
+                        "id": pos.get("id", ""),
+                        "symbol": pos.get("symbol", ""),
+                        "side": "long" if pos.get("side") == "Long" else "short",
+                        "size": float(pos.get("size", 0)),
+                        "entryPrice": float(pos.get("open_value", 0)) / float(pos.get("size", 1)) if float(pos.get("size", 0)) > 0 else 0,
+                        "leverage": float(pos.get("leverage", 1)),
+                        "unrealizedPnl": float(pos.get("unrealizePnl", 0)),
+                        "liquidationPrice": float(pos.get("liquidatePrice", 0)),
+                        "marginMode": "isolated" if pos.get("margin_mode") == "ISOLATED" else "cross",
+                        "timestamp": pos.get("updated_time", 0),
+                        "info": pos  # 保留原始数据
+                    }
+                    positions.append(position)
+            
+            print(f"成功获取{len(positions)}个持仓信息")
+            return positions
+        except Exception as e:
+            print(f"获取持仓情况时出错: {str(e)}")
+            return []
+    
+    def create_market_order(self, symbol, side, amount, **kwargs):
+        """
+        创建市价单
+        对应OKX SDK的exchange.create_market_order方法
+        
+        Args:
+            symbol (str): 交易对，如 "cmt_bchusdt"
+            side (str): 交易方向，"buy" 或 "sell"
+            amount (float): 订单数量
+            **kwargs: 其他可选参数
+            
+        Returns:
+            dict: 订单信息
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/placeOrder"
+            
+            # 生成客户端订单ID
+            client_oid = kwargs.get("client_oid", f"{int(time.time() * 1000)}")
+            
+            # 映射交易方向
+            # 1: Open long, 2: Open short, 3: Close long, 4: Close short
+            if kwargs.get("reduce_only", False):
+                # 平仓订单
+                order_type = 3 if side.lower() == "sell" else 4
+            else:
+                # 开仓订单
+                order_type = 1 if side.lower() == "buy" else 2
+            
+            # 构建请求数据
+            data = {
+                "symbol": symbol,
+                "client_oid": client_oid,
+                "size": str(amount),
+                "type": str(order_type),
+                "order_type": "0",  # 0: Normal
+                "match_price": "1"  # 1: Market price
+            }
+            
+            # 添加可选参数
+            if "price" in kwargs and float(kwargs["price"]) > 0:
+                data["price"] = str(kwargs["price"])
+            if "presetTakeProfitPrice" in kwargs:
+                data["presetTakeProfitPrice"] = kwargs["presetTakeProfitPrice"]
+            if "presetStopLossPrice" in kwargs:
+                data["presetStopLossPrice"] = kwargs["presetStopLossPrice"]
+            if "marginMode" in kwargs:
+                data["marginMode"] = kwargs["marginMode"]
+            if "separatedMode" in kwargs:
+                data["separatedMode"] = kwargs["separatedMode"]
+            
+            # 发送POST请求，需要签名
+            print(f"尝试创建市价{side}单，交易对: {symbol}，数量: {amount}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
+            
+            # 处理响应数据
+            order = {
+                "id": response.get("order_id", ""),
+                "clientOrderId": response.get("client_oid", client_oid),
+                "symbol": symbol,
+                "side": side,
+                "type": "market",
+                "amount": amount,
+                "info": response  # 保留原始数据
+            }
+            
+            print(f"市价单创建成功，订单ID: {order['id']}")
+            return order
+        except Exception as e:
+            print(f"创建市价单时出错: {str(e)}")
+            return None
 
 
 # 测试用例函数
