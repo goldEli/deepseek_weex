@@ -278,15 +278,15 @@ class WeexClient:
             print(f"获取到的资产列表: {assets}")
             
             # 遍历资产列表，查找USDT资产
-            # 针对合约API，collateral字段中的资产包含amount字段
+            # 针对合约API，collateral字段中的资产包含legacy_amount字段
             for asset in assets:
                 if isinstance(asset, dict):
-                    # 检查是否为抵押品信息（包含amount字段）
-                    if 'amount' in asset:
+                    # 检查是否为抵押品信息（包含legacy_amount字段）
+                    if 'legacy_amount' in asset:
                         # 假设第一个抵押品就是USDT（根据API响应）
                         # 如果需要精确匹配，可以添加币种判断逻辑
-                        balance = asset.get('amount', '0')
-                        print(f"找到USDT资产，amount={balance}")
+                        balance = asset.get('legacy_amount', '0')
+                        print(f"找到USDT资产，legacy_amount={balance}")
                         return float(balance)
             
             print(f"未找到{coin_symbol}资产或获取失败")
