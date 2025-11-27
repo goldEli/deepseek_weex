@@ -225,7 +225,7 @@ class WeexClient:
         
         Args:
             symbol (str): 合约交易对，例如 "cmt_bchusdt"
-            margin_mode (int): 保证金模式，1表示逐仓，0表示全仓
+            margin_mode (int): 保证金模式，1表示Cross Mode(全仓)，3表示Isolated Mode(逐仓)
             long_leverage (str, optional): 多头杠杆倍数，例如 "2"
             short_leverage (str, optional): 空头杠杆倍数，例如 "2"
             
@@ -235,17 +235,17 @@ class WeexClient:
         # 设置API路径
         request_path = "/capi/v2/account/leverage"
         
-        # 构建请求数据
+        # 构建请求数据，确保参数格式正确
+        # API要求：
+        # - marginMode必须是Integer类型，1表示全仓，3表示逐仓
+        # - 必须同时提供longLeverage和shortLeverage参数
+        # - 全仓模式下，多头和空头杠杆必须相同
         data = {
             "symbol": symbol,
-            "marginMode": margin_mode
+            "marginMode": int(margin_mode),  # 必须是整数类型
+            "longLeverage": str(long_leverage) if long_leverage is not None else "1",
+            "shortLeverage": str(short_leverage) if short_leverage is not None else str(long_leverage if long_leverage is not None else "1")
         }
-        
-        # 添加可选参数
-        if long_leverage is not None:
-            data["longLeverage"] = long_leverage
-        if short_leverage is not None:
-            data["shortLeverage"] = short_leverage
         
         try:
             # 发送POST请求，需要签名
@@ -254,7 +254,8 @@ class WeexClient:
                 "locale": "zh-CN",
                 "Content-Type": "application/json"
             }
-            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
+            # 确保正确传递参数到_request方法
+            response = self._request(method="POST", request_path=request_path, data=data, need_sign=True, headers=custom_headers)
             print(f"杠杆设置响应: {response}")
             return response
         except Exception as e:

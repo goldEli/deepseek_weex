@@ -49,8 +49,8 @@ def setup_exchange():
     """设置交易所参数"""
     try:
         # WEEX设置杠杆 - 使用我们的set_leverage方法
-        # 1表示逐仓模式，0表示全仓模式
-        margin_mode = 0  # 全仓模式
+        # 根据API文档：1表示全仓模式(Cross Mode)，3表示逐仓模式(Isolated Mode)
+        margin_mode = 1  # 全仓模式（根据API文档要求使用整数1）
         exchange.set_leverage(
             symbol=TRADE_CONFIG['symbol'],
             margin_mode=margin_mode,
