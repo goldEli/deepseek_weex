@@ -51,10 +51,11 @@ def cancel_conflicting_order(order_id, symbol):
         ("/capi/v2/order/cancel", {"order_id": order_id})
     ]
     
-    for path, params in paths:
+    for path, data in paths:
         try:
-            print(f"尝试路径: {path}, 参数: {params}")
-            response = client._request('POST', path, params)
+            print(f"尝试路径: {path}, 参数: {data}")
+            # 使用data参数而不是params，与SDK保持一致
+            response = client._request('POST', path, data=data, need_sign=True)
             print(f"成功取消订单: {order_id}")
             return True
         except Exception as e:
@@ -95,8 +96,8 @@ def normalize_order_size(amount, step_size=0.0001):
 
 def close_position_with_adaptive_strategy(symbol, position_side, position_size):
     """使用自适应策略平仓"""
-    # 确定平仓方向
-    close_side = "buy" if position_side == "sell" else "sell"
+    # 确定平仓方向 - 修复持仓方向判断
+    close_side = "buy" if position_side == "short" else "sell"
     
     # 规范化持仓数量，使其符合stepSize要求
     normalized_position_size = normalize_order_size(position_size)
@@ -114,50 +115,43 @@ def close_position_with_adaptive_strategy(symbol, position_side, position_size):
             # 生成客户端订单ID
             client_oid = f"close_{symbol}_{position_side}_{int(time.time() * 1000)}"
             
-            # 构建请求参数 - 修复API参数格式，使用data替代params
-            # 根据错误信息，添加缺失的trade_type字段
-            order_type = "4" if close_side == "buy" else "3"  # BUY=4, SELL=3
-            data = {
-                'symbol': symbol,
-                'client_oid': client_oid,
-                'size': str(current_size),
-                'type': order_type,
-                'order_type': '0',  # 限价单
-                'match_price': '1',  # 市价单
-                'trade_type': '1'    # 添加缺失的类型字段
-            }
+            # 使用SDK中已定义的create_market_order方法进行平仓
+            # 设置reduce_only=True表示平仓操作
+            print(f"发送市价{close_side}平仓请求: 交易对={symbol}, 数量={current_size}")
+            order = client.create_market_order(symbol, close_side, current_size, client_oid=client_oid, reduce_only=True)
             
-            # 设置请求头
-            headers = {
-                "locale": "zh-CN",
-                "Content-Type": "application/json"
-            }
-            
-            print(f"发送平仓请求: {data}")
-            # 发送请求 - 使用data参数替代params，添加必要的参数
-            response = client._request('POST', '/capi/v2/order/placeOrder', data=data, need_sign=True, headers=headers)
-            
-            # 检查响应
-            if isinstance(response, dict):
-                if 'data' in response and response['data']:
-                    order_id = response['data'].get('id') or response['data'].get('order_id')
-                    if order_id:
-                        print(f"✓ 平仓成功! 订单ID: {order_id}")
-                        return True
-                elif 'code' in response and response['code'] == '40015':
-                    # 处理冲突订单错误
-                    error_msg = response.get('msg', '')
-                    print(f"冲突订单错误: {error_msg}")
-                    
-                    # 提取并取消冲突订单
-                    conflict_order_id = extract_order_id(error_msg)
-                    if conflict_order_id:
-                        if cancel_conflicting_order(conflict_order_id, symbol):
-                            print("冲突订单已取消，准备重试")
-                            time.sleep(1)  # 等待订单取消生效
-                            continue
-            
-            print(f"未预期的响应格式: {response}")
+            # 检查订单创建结果
+            if order and order.get('id'):
+                print(f"✓ 平仓成功! 订单ID: {order['id']}")
+                return True
+            elif order is None:
+                # 订单创建失败，尝试提取冲突订单信息
+                print("订单创建失败，尝试查找冲突订单")
+                
+                # 尝试获取并取消未完成的订单
+                try:
+                    # 获取未完成订单
+                    print("尝试获取未完成订单...")
+                    open_orders = client._request('GET', '/capi/v2/order/openOrders', need_sign=True)
+                    if isinstance(open_orders, list):
+                        # 取消相关交易对的未完成订单
+                        for open_order in open_orders:
+                            if open_order.get('symbol') == symbol:
+                                order_id = open_order.get('id') or open_order.get('order_id')
+                                if order_id:
+                                    print(f"发现相关未完成订单: {order_id}")
+                                    if cancel_conflicting_order(order_id, symbol):
+                                        print("冲突订单已取消，准备重试")
+                                        time.sleep(1)  # 等待订单取消生效
+                                        continue
+                except Exception as get_orders_error:
+                    print(f"获取未完成订单时出错: {get_orders_error}")
+                
+                print("准备重试")
+                time.sleep(1)  # 等待后重试
+                continue
+            else:
+                print(f"未预期的订单格式: {order}")
             
         except Exception as e:
             error_str = str(e)
@@ -167,7 +161,7 @@ def close_position_with_adaptive_strategy(symbol, position_side, position_size):
             error_msg = parse_error_response(error_str)
             
             # 检查是否为冲突订单错误
-            if 'FAILED_PRECONDITION' in error_msg and 'position side invalid' in error_msg:
+            if any(keyword in error_msg for keyword in ['FAILED_PRECONDITION', 'position side invalid', 'conflict', 'conflicting']):
                 # 提取并取消冲突订单
                 conflict_order_id = extract_order_id(error_msg)
                 if conflict_order_id:
@@ -175,6 +169,23 @@ def close_position_with_adaptive_strategy(symbol, position_side, position_size):
                         print("冲突订单已取消，准备重试")
                         time.sleep(1)  # 等待订单取消生效
                         continue
+                else:
+                    # 如果无法提取订单ID，尝试获取并取消所有相关未完成订单
+                    try:
+                        print("无法提取订单ID，尝试获取所有未完成订单...")
+                        open_orders = client._request('GET', '/capi/v2/order/openOrders', need_sign=True)
+                        if isinstance(open_orders, list):
+                            for open_order in open_orders:
+                                if open_order.get('symbol') == symbol:
+                                    order_id = open_order.get('id') or open_order.get('order_id')
+                                    if order_id:
+                                        print(f"取消未完成订单: {order_id}")
+                                        cancel_conflicting_order(order_id, symbol)
+                        print("未完成订单清理完成，准备重试")
+                        time.sleep(2)  # 等待订单取消生效
+                        continue
+                    except Exception as cleanup_error:
+                        print(f"清理未完成订单时出错: {cleanup_error}")
         
         # 调整数量并重试，确保符合stepSize要求
         current_size *= 0.97  # 减少3%
