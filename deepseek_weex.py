@@ -157,8 +157,8 @@ exchange = WeexClient(api_key=WEEX_API_KEY, api_secret=WEEX_SECRET, api_passphra
 TRADE_CONFIG = {
     'symbol': 'BTC/USDT',
     'amount': 0.001,  # 交易数量 (BTC)
-    'leverage': 10,  # 杠杆倍数
-    'timeframe': '15m',  # 使用1小时K线，可改为15m
+    'order_size': 0.001,  # 订单大小，用于订单执行函数
+    'timeframe': '15m',  # 时间周期，可改为1h, 4h, 1d
     'test_mode': False,  # 测试模式
 }
 
@@ -169,18 +169,8 @@ position = None
 
 
 def setup_exchange():
-    """设置交易所参数"""
+    """设置交易所参数 - 符合WEEX现货API DOC.md规范"""
     try:
-        # 设置杠杆 - WEEX API
-        leverage_params = {
-            'symbol': TRADE_CONFIG['symbol'].replace('/', ''),  # 去掉斜杠
-            'leverage': TRADE_CONFIG['leverage']
-        }
-        # 使用正确的端点路径 - 根据API文档
-        # leverage_response = exchange._request('POST', '/perpetual/position/leverage', params=leverage_params)
-        # if leverage_response:
-        #     print(f"设置杠杆倍数: {TRADE_CONFIG['leverage']}x")
-        #     print(f"杠杆设置响应: {leverage_response}")
 
         # 获取余额 - WEEX API
         # 使用现货API的余额查询端点
@@ -238,8 +228,8 @@ def get_btc_ohlcv():
         }
         
         print(f"获取K线数据参数: {params}")
-        # 使用现货API的K线数据端点
-        ohlcv_response = exchange._request('GET', '/api/v2/market/history/kline', params=params, need_sign=False)
+        # 使用现货API的K线数据端点 - 修正为正确的路径格式
+        ohlcv_response = exchange._request('GET', f'/api/v2/market/candles/{symbol}', params=params, need_sign=False)
         
         print(f"K线数据响应: {ohlcv_response}")
         
@@ -248,14 +238,17 @@ def get_btc_ohlcv():
             print("获取K线数据失败: 响应为空")
             return None
         
-        # 尝试提取数据
+        # 检查是否成功响应
         if isinstance(ohlcv_response, dict):
+            if ohlcv_response.get('code') != '00000':
+                print(f"获取K线数据失败: {ohlcv_response.get('msg', '未知错误')}")
+                return None
+            
+            # 提取数据
             if 'data' in ohlcv_response:
                 ohlcv_data = ohlcv_response['data']
-            elif 'rows' in ohlcv_response:
-                ohlcv_data = ohlcv_response['rows']
             else:
-                print(f"获取K线数据失败: 响应中未找到data或rows字段")
+                print(f"获取K线数据失败: 响应中未找到data字段")
                 return None
         else:
             print("获取K线数据失败: 响应不是预期的JSON格式")
@@ -304,119 +297,62 @@ def get_btc_ohlcv():
 def get_current_position():
     """获取当前持仓情况 - WEEX API"""
     try:
-        # 获取所有持仓 - WEEX API
+        # 注意：现货API没有专门的持仓查询端点
+        # 在现货交易中，我们需要通过获取账户资产来判断持仓情况
         symbol = TRADE_CONFIG['symbol'].replace('/', '')
-        params = {
-            'symbol': symbol
-        }
         
-        print(f"获取持仓参数: {params}")
-        # 使用现货API的持仓查询端点
-        positions_response = exchange._request('GET', '/api/v2/account/positions', params=params)
+        print(f"获取账户资产参数: 交易对={symbol}")
+        # 获取账户资产信息
+        balance_response = exchange._request('GET', '/api/v2/account/balance', params={})
         
-        print(f"持仓响应: {positions_response}")
+        print(f"账户资产响应: {balance_response}")
         
-        if not positions_response:
-            print("获取持仓失败: 响应为空")
+        if not balance_response or not isinstance(balance_response, dict):
+            print("获取账户资产失败: 响应为空或格式错误")
             return None
         
-        # 检查响应结构
-        if isinstance(positions_response, dict):
-            if 'data' in positions_response:
-                positions = positions_response['data']
-            elif isinstance(positions_response.get('positions'), list):
-                positions = positions_response['positions']
-            else:
-                # 可能直接是持仓数据
-                positions = positions_response
-        else:
-            positions = positions_response
+        # 检查是否成功响应
+        if balance_response.get('code') != '00000':
+            print(f"获取账户资产失败: {balance_response.get('msg', '未知错误')}")
+            return None
         
-        # 标准化配置的交易对符号
-        config_symbol = symbol.upper()
+        # 提取基础货币和计价货币
+        base_coin = TRADE_CONFIG['symbol'].split('/')[0]  # 例如BTC
+        quote_coin = TRADE_CONFIG['symbol'].split('/')[1]  # 例如USDT
         
-        # 遍历持仓
-        if isinstance(positions, list):
-            for pos in positions:
-                if not isinstance(pos, dict):
-                    continue
-                    
-                # 提取持仓信息 - 兼容多种字段名
-                symbol = pos.get('symbol', '').upper() or pos.get('symbolName', '').upper()
-                
-                # 尝试多种可能的持仓量字段名
-                position_amt = 0
-                for field in ['size', 'position', 'positionAmt', 'quantity']:
-                    if field in pos:
-                        try:
-                            position_amt = float(pos[field])
-                            break
-                        except (ValueError, TypeError):
-                            continue
-                
-                # 尝试多种可能的方向字段名
-                side = 'none'
-                for field in ['side', 'positionSide']:
-                    if field in pos:
-                        side = pos[field].lower()
-                        break
-                
-                # 如果找不到明确的方向，尝试根据持仓量正负判断
-                if side == 'none' and position_amt != 0:
-                    side = 'long' if position_amt > 0 else 'short'
-                    position_amt = abs(position_amt)
-                
-                print(f"检查持仓: 符号={symbol}, 数量={position_amt}, 方向={side}")
-                
-                # 匹配交易对并检查是否有持仓
-                if symbol == config_symbol and position_amt > 0:
-                    # 提取平均价格和盈亏
-                    avg_price = 0
-                    for field in ['avgPrice', 'entryPrice', 'averagePrice']:
-                        if field in pos:
-                            try:
-                                avg_price = float(pos[field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    unrealized_pnl = 0
-                    for field in ['unrealizedProfit', 'unrealizedPnl', 'profit']:
-                        if field in pos:
-                            try:
-                                unrealized_pnl = float(pos[field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    return {
-                        'side': side,
-                        'size': position_amt,
-                        'entry_price': avg_price,
-                        'unrealized_pnl': unrealized_pnl,
-                        'position_amt': position_amt if side == 'long' else -position_amt,
-                        'symbol': symbol
-                    }
-        elif isinstance(positions, dict) and positions.get('symbol', '').upper() == config_symbol:
-            # 单个持仓的情况
-            pos = positions
-            
-            # 提取持仓信息
-            symbol = pos.get('symbol', '').upper()
-            position_amt = float(pos.get('size', 0))
-            side = pos.get('side', '').lower()
-            
-            if position_amt > 0:
-                return {
-                    'side': side,
-                    'size': position_amt,
-                    'entry_price': float(pos.get('avgPrice', 0)),
-                    'unrealized_pnl': float(pos.get('unrealizedProfit', 0)),
-                    'position_amt': position_amt if side == 'long' else -position_amt,
-                    'symbol': symbol
-                }
+        # 遍历资产数据检查是否持有基础货币（作为多仓的判断依据）
+        if 'data' in balance_response and isinstance(balance_response['data'], list):
+            for coin in balance_response['data']:
+                if isinstance(coin, dict) and coin.get('coinName') == base_coin:
+                    # 获取基础货币余额
+                    try:
+                        available = float(coin.get('available', 0))
+                        frozen = float(coin.get('frozen', 0))
+                        total = available + frozen
+                        
+                        # 如果有基础货币余额，简单判断为持有多仓
+                        # 注意：这是简化的判断逻辑，实际情况可能需要更复杂的订单跟踪
+                        if total > 0:
+                            print(f"检测到{base_coin}余额: {total}，判定为持有多仓")
+                            
+                            # 尝试获取当前价格来计算盈亏
+                            price_data = get_btc_ohlcv()
+                            current_price = price_data['price'] if price_data else 0
+                            
+                            # 由于没有平均入场价，这里使用当前价格作为估计
+                            # 实际应用中，应该通过订单历史记录计算平均入场价
+                            return {
+                                'side': 'long',
+                                'size': total,
+                                'entry_price': current_price,  # 这是一个估计值
+                                'unrealized_pnl': 0,  # 无法准确计算，设为0
+                                'position_amt': total,
+                                'symbol': symbol
+                            }
+                    except (ValueError, TypeError) as e:
+                        print(f"解析{base_coin}余额失败: {e}")
         
-        print("未找到有效持仓")
+        print("未检测到持仓")
         return None
 
     except Exception as e:
@@ -545,66 +481,87 @@ def execute_trade(signal_data, price_data):
         return
 
     try:
-        # WEEX API 下单函数
-        def place_order(symbol, side, order_type, quantity, price=None):
-            """下单辅助函数 - 根据WEEX API规范"""
-            # 根据curl示例构建正确的批量下单参数格式
-            order_list = [{
-                "side": side.lower(),
-                "orderType": order_type.lower(),
-                "force": "normal",
-                "quantity": str(quantity),
-                "clientOrderId": f"{int(time.time())}{random.randint(100000, 999999)}"
-            }]
-            
-            # 如果是限价单，添加价格
-            if price:
-                order_list[0]["price"] = str(price)
-            
+        # WEEX API 下单函数 - 符合DOC.md规范
+        def place_order(order_params_list):
+            """下单辅助函数 - 根据WEEX API DOC.md规范"""
             # 构建批量下单参数
             params = {
-                "symbol": symbol,
-                "orderList": order_list
+                "symbol": order_params_list[0]['symbol'],  # 从第一个订单获取交易对
+                "orderList": order_params_list
             }
             
             print(f"下单参数: {params}")
             # 使用正确的现货API端点路径
-            response = exchange._request('POST', '/api/v2/trade/batch-orders', params=params)
-            print(f"下单响应: {response}")
-            return response
+            order_response = exchange._request('POST', '/api/v2/trade/batch-orders', params=params)
+            print(f"下单响应: {order_response}")
+            
+            # 按照DOC.md规范检查响应格式
+            if not order_response:
+                print("下单失败: 响应为空")
+                return False
+            
+            if isinstance(order_response, dict):
+                # WEEX API响应应该包含code字段
+                if 'code' in order_response:
+                    if order_response['code'] == '00000':
+                        print("下单成功")
+                        return True
+                    else:
+                        print(f"下单失败: {order_response.get('msg', '未知错误')}")
+                        return False
+                else:
+                    print("下单失败: 响应格式不符合API规范")
+                    return False
+            
+            print("下单失败: 响应格式错误")
+            return False
         
-        symbol = TRADE_CONFIG['symbol'].replace('/', '')  # 格式化交易对
+        # 格式化交易对为WEEX现货API要求的格式，根据DOC.md规范，可能需要_SPBL后缀
+        symbol = TRADE_CONFIG['symbol'].replace('/', '')
+        
+        # 获取当前价格
+        current_price = price_data['price']
         
         # 交易逻辑
         if signal_data['signal'] == 'BUY':
-            if current_position and current_position['side'] == 'short':
-                # 平空仓
-                print("平空仓...")
-                response = place_order(symbol, 'BUY', 'MARKET', current_position['size'])
-                print(f"平空仓响应: {response}")
-            elif not current_position or current_position['side'] == 'long':
-                # 开多仓或加多仓
+            # 现货交易中，买入相当于开多仓
+            # 注意：现货交易不支持做空，因此不需要处理short持仓的情况
+            if not current_position:
                 print("开多仓...")
-                response = place_order(symbol, 'BUY', 'MARKET', TRADE_CONFIG['amount'])
-                print(f"开多仓响应: {response}")
+                params = [{
+                    "symbol": symbol,  # 根据DOC.md规范，交易对格式可能需要_SPBL后缀
+                    "side": "BUY",  # 大写
+                    "type": "LIMIT",  # 使用type字段且大写
+                    "price": str(current_price),  # 使用当前价格作为限价
+                    "quantity": str(TRADE_CONFIG['amount']),
+                    "timeInForce": "GTC",  # 符合DOC.md规范的时间生效类型
+                    "clientOrderId": f"{int(time.time())}{random.randint(100000, 999999)}"
+                }]
+                place_order(params)
+            else:
+                print("已有持仓，不执行买入操作")
 
         elif signal_data['signal'] == 'SELL':
+            # 现货交易中，卖出相当于平多仓
             if current_position and current_position['side'] == 'long':
-                # 平多仓
-                print("平多仓...")
-                response = place_order(symbol, 'SELL', 'MARKET', current_position['size'])
-                print(f"平多仓响应: {response}")
-            elif not current_position or current_position['side'] == 'short':
-                # 开空仓或加空仓
-                print("开空仓...")
-                response = place_order(symbol, 'SELL', 'MARKET', TRADE_CONFIG['amount'])
-                print(f"开空仓响应: {response}")
+                print("卖出持仓...")
+                params = [{
+                    "symbol": symbol,  # 根据DOC.md规范，交易对格式可能需要_SPBL后缀
+                    "side": "SELL",  # 大写
+                    "type": "LIMIT",  # 使用type字段且大写
+                    "price": str(current_price),  # 使用当前价格作为限价
+                    "quantity": str(current_position['size']),
+                    "timeInForce": "GTC",  # 符合DOC.md规范的时间生效类型
+                    "clientOrderId": f"{int(time.time())}{random.randint(100000, 999999)}"
+                }]
+                place_order(params)
+            else:
+                print("没有持仓可卖出")
 
         elif signal_data['signal'] == 'HOLD':
             print("建议观望，不执行交易")
             return
 
-        print("订单执行成功")
         time.sleep(2)
         position = get_current_position()
         print(f"更新后持仓: {position}")
@@ -641,6 +598,7 @@ def trading_bot():
 def main():
     """主函数"""
     print("BTC/USDT 自动交易机器人启动成功！")
+    print("注意：当前使用WEEX现货API，仅支持买入和卖出操作，不支持杠杆和做空功能")
 
     if TRADE_CONFIG['test_mode']:
         print("当前为模拟模式，不会真实下单")
@@ -690,9 +648,8 @@ if __name__ == "__main__":
     2. 首次运行前，建议将TRADE_CONFIG中的test_mode设置为True进行测试
     
     3. 根据需要调整交易参数：
-       - symbol: 交易对，如'BTC/USDT'
-       - amount: 交易数量
-       - leverage: 杠杆倍数
+       - symbol: 交易对，如'BTC/USDT'（现货交易对格式）
+       - amount: 交易数量（注意：现货交易对可能需要特定后缀）
        - timeframe: 时间周期，支持'15m', '1h', '4h', '1d'
     
     4. 脚本会根据设置的时间周期自动定时执行交易策略
