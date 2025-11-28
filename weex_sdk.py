@@ -368,6 +368,129 @@ class WeexClient:
             print(f"获取{coin_symbol}余额时出错: {str(e)}")
             return 0.0
     
+    def get_history_orders(self, symbol=None, page_size=None, create_date=None):
+        """
+        获取历史订单列表
+        参考文档: GET /capi/v2/order/history
+        
+        Args:
+            symbol (str, optional): 交易对，例如 "cmt_btcusdt"
+            page_size (int, optional): 每页数量
+            create_date (int, optional): 时间戳（毫秒）
+        
+        Returns:
+            dict: 包含orders字段（订单列表）的响应数据
+        """
+        # 参数验证
+        if symbol is not None:
+            if not isinstance(symbol, str) or not symbol.strip():
+                print("错误: symbol参数必须是非空字符串")
+                return {
+                    "orders": [],
+                    "error": "symbol参数无效",
+                    "error_code": "INVALID_PARAMETER"
+                }
+        
+        if page_size is not None:
+            if not isinstance(page_size, int) or page_size <= 0:
+                print(f"错误: page_size参数必须是正整数，当前值: {page_size}")
+                return {
+                    "orders": [],
+                    "error": "page_size参数无效，必须是正整数",
+                    "error_code": "INVALID_PARAMETER"
+                }
+            # 限制page_size最大值，避免请求过多数据
+            if page_size > 500:
+                print(f"警告: page_size({page_size})超过最大限制，将调整为500")
+                page_size = 500
+        
+        if create_date is not None:
+            if not isinstance(create_date, int):
+                print(f"错误: create_date参数必须是整数类型（时间戳），当前值: {create_date}")
+                return {
+                    "orders": [],
+                    "error": "create_date参数必须是整数类型（时间戳）",
+                    "error_code": "INVALID_PARAMETER"
+                }
+            if create_date <= 0:
+                print(f"错误: create_date参数必须是正整数时间戳，当前值: {create_date}")
+                return {
+                    "orders": [],
+                    "error": "create_date参数必须是正整数时间戳",
+                    "error_code": "INVALID_PARAMETER"
+                }
+        
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/history"
+            
+            # 构建查询参数
+            params = {}
+            
+            # 添加可选参数
+            if symbol is not None:
+                params["symbol"] = symbol 
+            if page_size is not None:
+                params["pageSize"] = page_size
+            if create_date is not None:
+                params["createDate"] = create_date
+            
+            # 发送GET请求，需要签名
+            print(f"尝试获取历史订单，交易对: {symbol if symbol else '所有'}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            
+            # 发送请求并处理网络错误
+            try:
+                response = self._request("GET", request_path, params=params, need_sign=True, headers=custom_headers)
+            except requests.RequestException as req_error:
+                print(f"网络请求错误: {str(req_error)}")
+                return {
+                    "orders": [],
+                    "error": f"网络请求失败: {str(req_error)}",
+                    "error_code": "NETWORK_ERROR"
+                }
+            
+            # 根据API文档，响应可能是一个订单数组
+            if isinstance(response, list):
+                # 格式化响应，确保返回格式一致
+                return {
+                    "orders": response,
+                    "has_more": False  # 无法从响应中判断是否有更多数据
+                }
+            elif isinstance(response, dict):
+                # 如果返回的是字典，可能是错误响应或其他格式
+                if "code" in response and response["code"] != 0:
+                    error_msg = response.get("msg", "未知API错误")
+                    error_code = response.get("code", "UNKNOWN_ERROR")
+                    print(f"API错误 - 代码: {error_code}, 消息: {error_msg}")
+                    return {
+                        "orders": [],
+                        "error": error_msg,
+                        "error_code": str(error_code)
+                    }
+                # 如果有orders字段，则返回该字段的值
+                if "orders" in response:
+                    return response
+                # 否则将整个响应作为orders返回
+                return {"orders": [response], "has_more": False}
+            else:
+                print(f"无效的响应格式: {type(response)}")
+                return {
+                    "orders": [],
+                    "error": "API返回的响应格式无效",
+                    "error_code": "INVALID_RESPONSE"
+                }
+        except Exception as e:
+            print(f"获取历史订单时出错: {str(e)}")
+            return {
+                "orders": [],
+                "error": f"获取历史订单失败: {str(e)}",
+                "error_code": "UNKNOWN_ERROR"
+            }
+            
     def get_order_history(self, symbol, start_time=None, end_time=None, delegate_type=None, page_size=None):
         """
         获取历史计划订单列表
