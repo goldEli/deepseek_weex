@@ -43,7 +43,7 @@ class WeexClient:
     def _sign(self, timestamp, method, request_path, data=None, params=None):
         """
         生成API签名
-        根据官方示例代码实现
+        根据官方示例代码实现 - 与office_demo.py保持一致
         
         Args:
             timestamp (str): 时间戳
@@ -57,16 +57,22 @@ class WeexClient:
         """
         import base64
         
-        # 构建查询字符串
+        # 构建查询字符串，严格按照官方demo的方式
         query_string = ''
         if params:
-            # 对查询参数进行排序，确保一致性
-            sorted_params = sorted(params.items())
-            query_string = '?' + '&'.join([f"{k}={v}" for k, v in sorted_params])
+            # 构建查询字符串，保持原始格式
+            query_items = []
+            for key, value in params.items():
+                # 转换值为字符串
+                str_value = str(value)
+                query_items.append(f"{key}={str_value}")
+            
+            if query_items:
+                query_string = '?' + '&'.join(query_items)
         
-        # 根据HTTP方法选择不同的签名方式
+        # 根据HTTP方法选择不同的签名方式 - 与官方demo保持一致
         if method.upper() == 'GET':
-            # GET请求的签名方式
+            # GET请求的签名方式 - 直接按照官方demo格式
             message = timestamp + method.upper() + request_path + query_string
         else:
             # POST/DELETE请求的签名方式
@@ -140,9 +146,27 @@ class WeexClient:
             headers['ACCESS-TIMESTAMP'] = timestamp
         
         try:
-            # 发送请求
+            # 确保params中的值都是字符串类型
+            if params:
+                string_params = {k: str(v) for k, v in params.items()}
+                params = string_params
+            
+            # 发送请求 - 对于GET请求，严格按照官方demo的URL拼接方式
             if method.upper() == 'GET':
-                response = requests.get(url, headers=headers, params=params, timeout=self.timeout)
+                # 直接将查询参数拼接到URL中，而不是通过params参数
+                if params:
+                    # 构建查询字符串
+                    query_items = []
+                    for key, value in params.items():
+                        query_items.append(f"{key}={value}")
+                    
+                    if query_items:
+                        full_url = url + '?' + '&'.join(query_items)
+                        response = requests.get(full_url, headers=headers, timeout=self.timeout)
+                    else:
+                        response = requests.get(url, headers=headers, timeout=self.timeout)
+                else:
+                    response = requests.get(url, headers=headers, timeout=self.timeout)
             elif method.upper() == 'POST':
                 response = requests.post(url, headers=headers, json=data, params=params, timeout=self.timeout)
             elif method.upper() == 'DELETE':

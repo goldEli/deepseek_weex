@@ -52,17 +52,18 @@ def test_order_history():
             api_passphrase=api_passphrase
         )
         
-        # 测试1: 获取所有交易对的历史订单（默认10条）
-        print("\n测试1: 获取所有交易对的历史订单（默认10条）")
-        orders = client.get_order_history()
+        # 测试1: 获取BTC交易对的历史订单（默认10条）
+        print("\n测试1: 获取BTC交易对的历史订单（默认10条）")
+        orders = client.get_order_history(symbol="cmt_btcusdt")
         
-        if not orders:
+        if not orders or not orders.get('orders'):
             print("警告: 未获取到任何历史订单")
         else:
-            print(f"成功获取到{len(orders)}条历史订单")
+            order_list = orders.get('orders', [])
+            print(f"成功获取到{len(order_list)}条历史订单")
             # 打印前3条订单的详细信息
             print(f"\n前3条订单的详细信息:")
-            for i, order in enumerate(orders[:3]):
+            for i, order in enumerate(order_list[:3]):
                 print(f"\n订单{i+1}:")
                 print(f"交易对: {order.get('symbol', 'N/A')}")
                 print(f"订单ID: {order.get('order_id', 'N/A')}")
@@ -81,27 +82,30 @@ def test_order_history():
         print(f"\n测试2: 获取特定交易对 {test_symbol} 的历史订单")
         symbol_orders = client.get_order_history(symbol=test_symbol)
         
-        if not symbol_orders:
+        if not symbol_orders or not symbol_orders.get('orders'):
             print(f"警告: 未获取到交易对 {test_symbol} 的任何历史订单")
         else:
-            print(f"成功获取到交易对 {test_symbol} 的{len(symbol_orders)}条历史订单")
+            symbol_order_list = symbol_orders.get('orders', [])
+            print(f"成功获取到交易对 {test_symbol} 的{len(symbol_order_list)}条历史订单")
         
         # 测试3: 自定义page_size参数
         custom_page_size = 5
         print(f"\n测试3: 自定义page_size={custom_page_size}")
-        custom_orders = client.get_order_history(page_size=custom_page_size)
-        print(f"成功获取到{len(custom_orders)}条历史订单（page_size={custom_page_size}）")
+        custom_orders = client.get_order_history(symbol="cmt_btcusdt", page_size=custom_page_size)
+        custom_order_list = custom_orders.get('orders', [])
+        print(f"成功获取到{len(custom_order_list)}条历史订单（page_size={custom_page_size}）")
         
-        # 测试4: 自定义create_date参数（最近7天的订单）
-        recent_days = 7
-        print(f"\n测试4: 获取最近{recent_days}天的历史订单")
-        recent_orders = client.get_order_history(create_date=recent_days)
-        print(f"成功获取到最近{recent_days}天的{len(recent_orders)}条历史订单")
+        # 测试4: 获取BTC交易对的历史订单（带默认参数）
+        print("\n测试4: 获取BTC交易对的历史订单（带默认参数）")
+        recent_orders = client.get_order_history(symbol="cmt_btcusdt")
+        recent_order_list = recent_orders.get('orders', [])
+        print(f"成功获取到{len(recent_order_list)}条BTC交易对历史订单")
         
-        # 测试5: 组合参数测试
-        print(f"\n测试5: 组合参数测试（交易对={test_symbol}, page_size=3, create_date={recent_days}）")
-        combined_orders = client.get_order_history(symbol=test_symbol, page_size=3, create_date=recent_days)
-        print(f"成功获取到{len(combined_orders)}条历史订单")
+        # 测试5: 组合参数测试（仅使用支持的参数）
+        print(f"\n测试5: 组合参数测试（交易对={test_symbol}, page_size=3）")
+        combined_orders = client.get_order_history(symbol=test_symbol, page_size=3)
+        combined_order_list = combined_orders.get('orders', [])
+        print(f"成功获取到{len(combined_order_list)}条历史订单")
         
         print("\n✅ 历史订单测试完成！")
         return True
