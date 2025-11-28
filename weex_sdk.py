@@ -533,76 +533,317 @@ class WeexClient:
             print(f"创建市价单时出错: {str(e)}")
             return None
     
-    def get_order_history(self, symbol=None, page_size=10, create_date=None):
+    def open_long(self, symbol, amount, price=None, order_type="0", match_price="1", **kwargs):
         """
-        获取历史订单
-        参考文档: https://www.weex.com/api-doc/contract/Transaction_API/GetOrderHistory
+        开多（建立多头仓位）
         
         Args:
-            symbol (str, optional): 交易对，例如 "cmt_bchusdt"
-            page_size (int, optional): 每页数量，默认为10
-            create_date (int, optional): 天数，必须≤90且不能为负数
+            symbol (str): 交易对，如 "cmt_bchusdt"
+            amount (float): 订单数量
+            price (float, optional): 订单价格，限价单时必填
+            order_type (str, optional): 订单类型，默认0: Normal
+            match_price (str, optional): 价格类型，默认1: Market price, 0: Limit price
+            **kwargs: 其他可选参数，如presetTakeProfitPrice, presetStopLossPrice, marginMode等
             
         Returns:
-            list: 历史订单列表，每个订单包含以下字段:
-                - symbol: 交易对
-                - size: 订单数量
-                - client_oid: 客户端标识符
-                - createTime: 创建时间
-                - filled_qty: 已成交数量
-                - fee: 交易费用
-                - order_id: 订单ID
-                - price: 订单价格
-                - price_avg: 平均成交价格
-                - status: 订单状态
-                - type: 订单类型
-                - order_type: 订单类型
-                - totalProfits: 总盈亏
-                - contracts: 合约单位的订单大小
+            dict: 订单信息
         """
         try:
             # 设置API路径
-            request_path = "/capi/v2/order/history"
+            request_path = "/capi/v2/order/placeOrder"
             
-            # 构建查询参数
-            params = {}
-            if symbol:
-                params["symbol"] = symbol
+            # 生成客户端订单ID
+            client_oid = kwargs.get("client_oid", f"{int(time.time() * 1000)}")
             
-            params["pageSize"] = page_size
+            # 开多对应的type为1
+            order_type_value = "1"  # 1: Open long
             
-            if create_date is not None:
-                # 验证create_date参数
-                if create_date < 0:
-                    raise ValueError("create_date不能为负数")
-                if create_date > 90:
-                    raise ValueError("create_date不能超过90天")
-                params["createDate"] = create_date
+            # 构建请求数据
+            data = {
+                "symbol": symbol,
+                "client_oid": client_oid,
+                "size": str(amount),
+                "type": order_type_value,
+                "order_type": order_type,
+                "match_price": match_price
+            }
             
-            # 发送GET请求，需要签名
-            print(f"尝试获取历史订单{'' if symbol is None else f'，交易对: {symbol}'}，每页{page_size}条")
+            # 如果是限价单且提供了价格，添加价格参数
+            if match_price == "0" and price is not None:
+                data["price"] = str(price)
+            elif match_price == "1" and price is not None:
+                # 市价单也可以提供价格作为参考
+                data["price"] = str(price)
+            
+            # 添加可选参数
+            if "presetTakeProfitPrice" in kwargs:
+                data["presetTakeProfitPrice"] = kwargs["presetTakeProfitPrice"]
+            if "presetStopLossPrice" in kwargs:
+                data["presetStopLossPrice"] = kwargs["presetStopLossPrice"]
+            if "marginMode" in kwargs:
+                data["marginMode"] = kwargs["marginMode"]
+            if "separatedMode" in kwargs:
+                data["separatedMode"] = kwargs["separatedMode"]
+            
+            # 发送POST请求，需要签名
+            print(f"尝试开多，交易对: {symbol}，数量: {amount}")
+            if match_price == "0" and price is not None:
+                print(f"限价: {price}")
             custom_headers = {
                 "locale": "zh-CN",
                 "Content-Type": "application/json"
             }
-            response = self._request("GET", request_path, params=params, need_sign=True, headers=custom_headers)
+            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
             
             # 处理响应数据
-            # API返回的是订单列表
-            orders = []
-            if isinstance(response, list):
-                orders = response
-                print(f"成功获取{len(orders)}条历史订单")
-            else:
-                print(f"警告: 响应格式不正确，期望列表类型，收到 {type(response).__name__}")
+            order = {
+                "id": response.get("order_id", ""),
+                "clientOrderId": response.get("client_oid", client_oid),
+                "symbol": symbol,
+                "side": "buy",
+                "type": "market" if match_price == "1" else "limit",
+                "amount": amount,
+                "price": price,
+                "info": response  # 保留原始数据
+            }
             
-            return orders
+            print(f"开多订单创建成功，订单ID: {order['id']}")
+            return order
         except Exception as e:
-            print(f"获取历史订单时出错: {str(e)}")
-            # 打印更详细的错误信息
-            import traceback
-            print(f"错误堆栈: {traceback.format_exc()}")
-            return []
+            print(f"开多时出错: {str(e)}")
+            return None
+    
+    def open_short(self, symbol, amount, price=None, order_type="0", match_price="1", **kwargs):
+        """
+        开空（建立空头仓位）
+        
+        Args:
+            symbol (str): 交易对，如 "cmt_bchusdt"
+            amount (float): 订单数量
+            price (float, optional): 订单价格，限价单时必填
+            order_type (str, optional): 订单类型，默认0: Normal
+            match_price (str, optional): 价格类型，默认1: Market price, 0: Limit price
+            **kwargs: 其他可选参数，如presetTakeProfitPrice, presetStopLossPrice, marginMode等
+            
+        Returns:
+            dict: 订单信息
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/placeOrder"
+            
+            # 生成客户端订单ID
+            client_oid = kwargs.get("client_oid", f"{int(time.time() * 1000)}")
+            
+            # 开空对应的type为2
+            order_type_value = "2"  # 2: Open short
+            
+            # 构建请求数据
+            data = {
+                "symbol": symbol,
+                "client_oid": client_oid,
+                "size": str(amount),
+                "type": order_type_value,
+                "order_type": order_type,
+                "match_price": match_price
+            }
+            
+            # 如果是限价单且提供了价格，添加价格参数
+            if match_price == "0" and price is not None:
+                data["price"] = str(price)
+            elif match_price == "1" and price is not None:
+                # 市价单也可以提供价格作为参考
+                data["price"] = str(price)
+            
+            # 添加可选参数
+            if "presetTakeProfitPrice" in kwargs:
+                data["presetTakeProfitPrice"] = kwargs["presetTakeProfitPrice"]
+            if "presetStopLossPrice" in kwargs:
+                data["presetStopLossPrice"] = kwargs["presetStopLossPrice"]
+            if "marginMode" in kwargs:
+                data["marginMode"] = kwargs["marginMode"]
+            if "separatedMode" in kwargs:
+                data["separatedMode"] = kwargs["separatedMode"]
+            
+            # 发送POST请求，需要签名
+            print(f"尝试开空，交易对: {symbol}，数量: {amount}")
+            if match_price == "0" and price is not None:
+                print(f"限价: {price}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
+            
+            # 处理响应数据
+            order = {
+                "id": response.get("order_id", ""),
+                "clientOrderId": response.get("client_oid", client_oid),
+                "symbol": symbol,
+                "side": "sell",
+                "type": "market" if match_price == "1" else "limit",
+                "amount": amount,
+                "price": price,
+                "info": response  # 保留原始数据
+            }
+            
+            print(f"开空订单创建成功，订单ID: {order['id']}")
+            return order
+        except Exception as e:
+            print(f"开空时出错: {str(e)}")
+            return None
+    
+    def close_long(self, symbol, amount, price=None, order_type="0", match_price="1", **kwargs):
+        """
+        平多（平仓多头仓位）
+        
+        Args:
+            symbol (str): 交易对，如 "cmt_bchusdt"
+            amount (float): 订单数量
+            price (float, optional): 订单价格，限价单时必填
+            order_type (str, optional): 订单类型，默认0: Normal
+            match_price (str, optional): 价格类型，默认1: Market price, 0: Limit price
+            **kwargs: 其他可选参数，如marginMode, separatedMode等
+            
+        Returns:
+            dict: 订单信息
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/placeOrder"
+            
+            # 生成客户端订单ID
+            client_oid = kwargs.get("client_oid", f"{int(time.time() * 1000)}")
+            
+            # 平多对应的type为3
+            order_type_value = "3"  # 3: Close long
+            
+            # 构建请求数据
+            data = {
+                "symbol": symbol,
+                "client_oid": client_oid,
+                "size": str(amount),
+                "type": order_type_value,
+                "order_type": order_type,
+                "match_price": match_price
+            }
+            
+            # 如果是限价单且提供了价格，添加价格参数
+            if match_price == "0" and price is not None:
+                data["price"] = str(price)
+            elif match_price == "1" and price is not None:
+                # 市价单也可以提供价格作为参考
+                data["price"] = str(price)
+            
+            # 添加可选参数
+            if "marginMode" in kwargs:
+                data["marginMode"] = kwargs["marginMode"]
+            if "separatedMode" in kwargs:
+                data["separatedMode"] = kwargs["separatedMode"]
+            
+            # 发送POST请求，需要签名
+            print(f"尝试平多，交易对: {symbol}，数量: {amount}")
+            if match_price == "0" and price is not None:
+                print(f"限价: {price}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
+            
+            # 处理响应数据
+            order = {
+                "id": response.get("order_id", ""),
+                "clientOrderId": response.get("client_oid", client_oid),
+                "symbol": symbol,
+                "side": "sell",
+                "type": "market" if match_price == "1" else "limit",
+                "amount": amount,
+                "price": price,
+                "info": response  # 保留原始数据
+            }
+            
+            print(f"平多订单创建成功，订单ID: {order['id']}")
+            return order
+        except Exception as e:
+            print(f"平多时出错: {str(e)}")
+            return None
+    
+    def close_short(self, symbol, amount, price=None, order_type="0", match_price="1", **kwargs):
+        """
+        平空（平仓空头仓位）
+        
+        Args:
+            symbol (str): 交易对，如 "cmt_bchusdt"
+            amount (float): 订单数量
+            price (float, optional): 订单价格，限价单时必填
+            order_type (str, optional): 订单类型，默认0: Normal
+            match_price (str, optional): 价格类型，默认1: Market price, 0: Limit price
+            **kwargs: 其他可选参数，如marginMode, separatedMode等
+            
+        Returns:
+            dict: 订单信息
+        """
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/placeOrder"
+            
+            # 生成客户端订单ID
+            client_oid = kwargs.get("client_oid", f"{int(time.time() * 1000)}")
+            
+            # 平空对应的type为4
+            order_type_value = "4"  # 4: Close short
+            
+            # 构建请求数据
+            data = {
+                "symbol": symbol,
+                "client_oid": client_oid,
+                "size": str(amount),
+                "type": order_type_value,
+                "order_type": order_type,
+                "match_price": match_price
+            }
+            
+            # 如果是限价单且提供了价格，添加价格参数
+            if match_price == "0" and price is not None:
+                data["price"] = str(price)
+            elif match_price == "1" and price is not None:
+                # 市价单也可以提供价格作为参考
+                data["price"] = str(price)
+            
+            # 添加可选参数
+            if "marginMode" in kwargs:
+                data["marginMode"] = kwargs["marginMode"]
+            if "separatedMode" in kwargs:
+                data["separatedMode"] = kwargs["separatedMode"]
+            
+            # 发送POST请求，需要签名
+            print(f"尝试平空，交易对: {symbol}，数量: {amount}")
+            if match_price == "0" and price is not None:
+                print(f"限价: {price}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            response = self._request("POST", request_path, data=data, need_sign=True, headers=custom_headers)
+            
+            # 处理响应数据
+            order = {
+                "id": response.get("order_id", ""),
+                "clientOrderId": response.get("client_oid", client_oid),
+                "symbol": symbol,
+                "side": "buy",
+                "type": "market" if match_price == "1" else "limit",
+                "amount": amount,
+                "price": price,
+                "info": response  # 保留原始数据
+            }
+            
+            print(f"平空订单创建成功，订单ID: {order['id']}")
+            return order
+        except Exception as e:
+            print(f"平空时出错: {str(e)}")
+            return None
 
 
 # 测试用例函数
@@ -710,6 +951,54 @@ def test_weex_client():
         else:
             print("  杠杆设置请求失败")
         
+        # 测试新增的交易方法 - 注意：这些测试默认不执行真实交易，仅打印测试信息
+        print("\n测试交易方法功能（模拟测试）...")
+        
+        # 测试开多方法
+        print("\n测试开多(open_long)方法...")
+        print(f"  模拟开多，交易对: {test_symbol}, 数量: 0.01, 价格类型: 市价单")
+        print("  注意：实际交易请取消下面的注释并提供有效的API密钥")
+        # open_long_result = client.open_long(
+        #     symbol=test_symbol,
+        #     amount=0.01,
+        #     match_price="1"  # 市价单
+        # )
+        # print(f"  开多结果: {open_long_result}")
+        
+        # 测试开空方法
+        print("\n测试开空(open_short)方法...")
+        print(f"  模拟开空，交易对: {test_symbol}, 数量: 0.01, 价格类型: 市价单")
+        print("  注意：实际交易请取消下面的注释并提供有效的API密钥")
+        # open_short_result = client.open_short(
+        #     symbol=test_symbol,
+        #     amount=0.01,
+        #     match_price="1"  # 市价单
+        # )
+        # print(f"  开空结果: {open_short_result}")
+        
+        # 测试平多方法
+        print("\n测试平多(close_long)方法...")
+        print(f"  模拟平多，交易对: {test_symbol}, 数量: 0.01, 价格类型: 市价单")
+        print("  注意：实际交易请取消下面的注释并提供有效的API密钥")
+        # close_long_result = client.close_long(
+        #     symbol=test_symbol,
+        #     amount=0.01,
+        #     match_price="1"  # 市价单
+        # )
+        # print(f"  平多结果: {close_long_result}")
+        
+        # 测试平空方法
+        print("\n测试平空(close_short)方法...")
+        print(f"  模拟平空，交易对: {test_symbol}, 数量: 0.01, 价格类型: 市价单")
+        print("  注意：实际交易请取消下面的注释并提供有效的API密钥")
+        # close_short_result = client.close_short(
+        #     symbol=test_symbol,
+        #     amount=0.01,
+        #     match_price="1"  # 市价单
+        # )
+        # print(f"  平空结果: {close_short_result}")
+        
+        print("\n交易方法测试完成（模拟模式）")
         return True
     except Exception as e:
         print(f"\n测试处理失败: {str(e)}")
