@@ -33,7 +33,7 @@ exchange = WeexClient(
 # 交易参数配置
 TRADE_CONFIG = {
     'symbol': 'cmt_btcusdt',  # WEEX的合约符号格式
-    'amount': 0.01,  # 交易数量 (BTC)
+    'amount': 0.05,  # 交易数量 (BTC)
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用15分钟K线
     'test_mode': False,  # 测试模式
@@ -252,7 +252,7 @@ def execute_trade(signal_data, price_data):
                 # 平空仓 - 使用我们的create_market_order方法
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
-                    'buy',
+                    'sell',
                     current_position['size'],
                     reduce_only=True  # 使用reduce_only参数表示平仓
                 )
@@ -279,7 +279,7 @@ def execute_trade(signal_data, price_data):
                 # 平多仓
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
-                    'sell',
+                    'buy',
                     current_position['size'],
                     reduce_only=True  # 使用reduce_only参数表示平仓
                 )
