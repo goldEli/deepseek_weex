@@ -51,10 +51,10 @@ def query_history_orders(symbol=None, page_size=10, create_days=7):
         
         # 打印订单详情
         if orders:
-            print(f"\n订单详情:")
-            print("-" * 100)
-            print(f"{'订单ID':<25} {'交易对':<15} {'价格':<12} {'数量':<12} {'状态':<12} {'类型':<15} {'时间'}")
-            print("-" * 100)
+            print(f"订单详情:")
+            print("-" * 120)
+            print(f"{'订单ID':<25} {'交易对':<15} {'价格':<12} {'数量':<12} {'状态':<12} {'类型':<15} {'盈利':<12} {'时间'}")
+            print("-" * 120)
             
             for order in orders:
                 order_id = order.get('order_id', 'N/A')
@@ -65,8 +65,41 @@ def query_history_orders(symbol=None, page_size=10, create_days=7):
                 order_type = order.get('type', 'N/A')
                 create_time = order.get('createTime', 'N/A')
                 
-                print(f"{order_id:<25} {symbol:<15} {price:<12} {size:<12} {status:<12} {order_type:<15} {create_time}")
-            print("-" * 100)
+                # 获取盈利信息，尝试从totalProfits或其他相关字段获取
+                profit = order.get('totalProfits', 'N/A')
+                
+                # 如果没有totalProfits字段，尝试从其他可能的字段获取
+                if profit == 'N/A':
+                    profit = order.get('profit', 'N/A')
+                    if profit == 'N/A':
+                        profit = order.get('pnl', 'N/A')
+                
+                print(f"{order_id:<25} {symbol:<15} {price:<12} {size:<12} {status:<12} {order_type:<15} {profit:<12} {create_time}")
+            print("-" * 120)
+            
+            # 计算并显示总盈利
+            total_profit = 0.0
+            has_profit_data = False
+            
+            for order in orders:
+                # 尝试从不同字段获取盈利数据
+                profit = order.get('totalProfits', 0)
+                if profit == 0:
+                    profit = order.get('profit', 0)
+                    if profit == 0:
+                        profit = order.get('pnl', 0)
+                
+                try:
+                    total_profit += float(profit)
+                    if profit != 0:
+                        has_profit_data = True
+                except (ValueError, TypeError):
+                    pass
+            
+            if has_profit_data:
+                print(f"\n总盈利: {total_profit:.8f}")
+            else:
+                print(f"\n无法计算总盈利: 未找到有效盈利数据")
     
     return result
 
