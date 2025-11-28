@@ -234,6 +234,8 @@ def main():
         # 获取持仓信息
         print(f"正在获取持仓信息{'' if args.symbol is None else f'，交易对: {args.symbol}'}...")
         positions = client.fetch_positions(symbol=args.symbol)
+
+        print(positions)
         
         # 显示当前时间
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
