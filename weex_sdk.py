@@ -344,6 +344,213 @@ class WeexClient:
             print(f"获取{coin_symbol}余额时出错: {str(e)}")
             return 0.0
     
+    def get_order_history(self, symbol, start_time=None, end_time=None, delegate_type=None, page_size=None):
+        """
+        获取历史计划订单列表
+        参考文档: GET /capi/v2/order/historyPlan
+        
+        Args:
+            symbol (str): 交易对，例如 "cmt_bchusdt"（必需）
+            start_time (int, optional): 开始时间戳
+            end_time (int, optional): 结束时间戳
+            delegate_type (int, optional): 订单类型: 1: 开多. 2: 开空. 3: 平多. 4: 平空.
+            page_size (int, optional): 每页数量
+        
+        Returns:
+            dict: 格式化后的订单历史信息，包含orders字段（处理后的订单列表）和has_more字段，以及error信息
+        """
+        # 参数验证
+        if not symbol or not isinstance(symbol, str):
+            print("错误: symbol参数必须是非空字符串")
+            return {
+                "orders": [], 
+                "has_more": False,
+                "error": "symbol参数无效",
+                "error_code": "INVALID_PARAMETER"
+            }
+        
+        # 验证可选参数类型
+        if start_time is not None and not isinstance(start_time, int):
+            print("错误: start_time参数必须是整数类型")
+            return {
+                "orders": [], 
+                "has_more": False,
+                "error": "start_time参数类型无效",
+                "error_code": "INVALID_PARAMETER"
+            }
+        
+        if end_time is not None and not isinstance(end_time, int):
+            print("错误: end_time参数必须是整数类型")
+            return {
+                "orders": [], 
+                "has_more": False,
+                "error": "end_time参数类型无效",
+                "error_code": "INVALID_PARAMETER"
+            }
+        
+        if delegate_type is not None:
+            if not isinstance(delegate_type, int) or delegate_type not in [1, 2, 3, 4]:
+                print(f"错误: delegate_type参数必须是1-4之间的整数，当前值: {delegate_type}")
+                return {
+                    "orders": [], 
+                    "has_more": False,
+                    "error": "delegate_type参数无效，必须是1-4之间的整数",
+                    "error_code": "INVALID_PARAMETER"
+                }
+        
+        if page_size is not None:
+            if not isinstance(page_size, int) or page_size <= 0:
+                print(f"错误: page_size参数必须是正整数，当前值: {page_size}")
+                return {
+                    "orders": [], 
+                    "has_more": False,
+                    "error": "page_size参数无效，必须是正整数",
+                    "error_code": "INVALID_PARAMETER"
+                }
+            # 限制page_size最大值，避免请求过多数据
+            if page_size > 500:
+                print(f"警告: page_size({page_size})超过最大限制，将调整为500")
+                page_size = 500
+        
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/historyPlan"
+            
+            # 构建查询参数
+            params = {
+                "symbol": symbol  # 必需参数
+            }
+            
+            # 添加可选参数
+            if start_time is not None:
+                params["startTime"] = start_time
+            if end_time is not None:
+                params["endTime"] = end_time
+            if delegate_type is not None:
+                params["delegateType"] = delegate_type
+            if page_size is not None:
+                params["pageSize"] = page_size
+            
+            # 发送GET请求，需要签名
+            print(f"尝试获取历史计划订单，交易对: {symbol}")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+            
+            # 发送请求并处理网络错误
+            try:
+                response = self._request("GET", request_path, params=params, need_sign=True, headers=custom_headers)
+            except requests.RequestException as req_error:
+                print(f"网络请求错误: {str(req_error)}")
+                return {
+                    "orders": [], 
+                    "has_more": False,
+                    "error": f"网络请求失败: {str(req_error)}",
+                    "error_code": "NETWORK_ERROR"
+                }
+            
+            # 检查响应是否有效
+            if not isinstance(response, dict):
+                print(f"无效的响应格式: {type(response)}")
+                return {
+                    "orders": [], 
+                    "has_more": False,
+                    "error": "API返回的响应格式无效",
+                    "error_code": "INVALID_RESPONSE"
+                }
+            
+            # 检查API是否返回错误
+            if "code" in response and response["code"] != 0:
+                error_msg = response.get("msg", "未知API错误")
+                error_code = response.get("code", "UNKNOWN_ERROR")
+                print(f"API错误 - 代码: {error_code}, 消息: {error_msg}")
+                return {
+                    "orders": [], 
+                    "has_more": False,
+                    "error": error_msg,
+                    "error_code": str(error_code)
+                }
+            
+            # 解析和格式化订单列表
+            formatted_orders = []
+            order_list = response.get("list", [])
+            
+            # 订单类型映射
+            order_type_map = {
+                1: "开多",
+                2: "开空",
+                3: "平多",
+                4: "平空"
+            }
+            
+            # 订单状态映射
+            status_map = {
+                0: "初始",
+                1: "触发成功",
+                2: "触发失败",
+                3: "已撤销",
+                4: "暂停",
+                5: "未触发"
+            }
+            
+            # 格式化每个订单
+            try:
+                for order in order_list:
+                    if isinstance(order, dict):
+                        formatted_order = {
+                            "order_id": order.get("orderId", ""),
+                            "symbol": order.get("symbol", ""),
+                            "order_type": order_type_map.get(order.get("delegateType"), "未知"),
+                            "order_type_code": order.get("delegateType"),
+                            "price": float(order.get("price", 0.0)),
+                            "volume": float(order.get("volume", 0.0)),
+                            "status": status_map.get(order.get("status"), "未知"),
+                            "status_code": order.get("status"),
+                            "create_time": order.get("createTime"),
+                            "update_time": order.get("updateTime"),
+                            "trigger_price": float(order.get("triggerPrice", 0.0)),
+                            "trigger_type": order.get("triggerType"),
+                            "order_source": order.get("source"),
+                            "reduce_only": bool(order.get("reduceOnly", False))
+                        }
+                        
+                        # 计算订单金额（用于展示）
+                        try:
+                            formatted_order["order_value"] = round(formatted_order["price"] * formatted_order["volume"], 8)
+                        except (TypeError, ValueError):
+                            formatted_order["order_value"] = 0.0
+                        
+                        formatted_orders.append(formatted_order)
+            except Exception as parse_error:
+                print(f"订单数据解析错误: {str(parse_error)}")
+                # 即使部分数据解析失败，也返回已成功解析的订单
+                print(f"已成功解析 {len(formatted_orders)} 条订单数据")
+            
+            # 构建返回结果
+            result = {
+                "orders": formatted_orders,
+                "has_more": bool(response.get("nextPage", False)),
+                "total_count": len(formatted_orders),
+                "error": None,
+                "error_code": None
+            }
+            
+            print(f"成功获取并格式化 {len(formatted_orders)} 条历史订单记录")
+            return result
+            
+        except Exception as e:
+            print(f"获取历史订单时发生未知错误: {str(e)}")
+            import traceback
+            print(f"错误堆栈: {traceback.format_exc()}")
+            # 返回空的订单列表和错误信息
+            return {
+                "orders": [], 
+                "has_more": False,
+                "error": f"未知错误: {str(e)}",
+                "error_code": "UNKNOWN_ERROR"
+            }
+    
     def fetch_ohlcv(self, symbol, timeframe, since=None, limit=100):
         """
         获取K线数据

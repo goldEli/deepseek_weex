@@ -1,286 +1,273 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-获取Weex历史订单脚本
-基于client.get_order_history()方法
+获取WEEX交易所当前持仓信息脚本
+
+功能：
+- 从环境变量加载API配置
+- 初始化WeexClient
+- 获取当前持仓信息
+- 格式化显示持仓数据
+- 支持彩色标记盈亏
+- 支持详细模式和测试网络
 """
 
 import os
 import sys
 import argparse
 from datetime import datetime
+
+# 尝试从.env文件加载环境变量
 from dotenv import load_dotenv
+load_dotenv()
 
-# 添加当前目录到Python路径，确保能导入weex_sdk
+# 导入WeexClient类
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 from weex_sdk import WeexClient
 
 
-def initialize_client():
-    """
-    初始化WeexClient客户端
+class PositionDisplay:
+    """持仓信息显示类"""
     
-    Returns:
-        WeexClient: 初始化后的客户端实例，如果失败则返回None
-    """
-    try:
-        # 加载环境变量
-        print("[INFO] 正在加载环境变量...")
-        load_dotenv()
+    # ANSI颜色代码
+    COLORS = {
+        'reset': '\033[0m',
+        'green': '\033[92m',
+        'red': '\033[91m',
+        'yellow': '\033[93m',
+        'blue': '\033[94m',
+        'bold': '\033[1m',
+    }
+    
+    @classmethod
+    def colorize(cls, text, color):
+        """给文本添加颜色"""
+        if not sys.stdout.isatty():
+            return text  # 非终端环境不使用颜色
+        return f"{cls.COLORS.get(color, '')}{text}{cls.COLORS['reset']}"
+    
+    @classmethod
+    def format_position_value(cls, value, decimals=4):
+        """格式化数值"""
+        try:
+            return f"{float(value):.{decimals}f}"
+        except (ValueError, TypeError):
+            return f"{value}"
+    
+    @classmethod
+    def format_pnl(cls, pnl):
+        """格式化盈亏并添加颜色"""
+        try:
+            pnl_float = float(pnl)
+            if pnl_float > 0:
+                return cls.colorize(f"+{pnl_float:.4f}", 'green')
+            elif pnl_float < 0:
+                return cls.colorize(f"{pnl_float:.4f}", 'red')
+            else:
+                return "0.0000"
+        except (ValueError, TypeError):
+            return f"{pnl}"
+    
+    @classmethod
+    def format_pnl_percentage(cls, pnl, entry_price, size):
+        """计算并格式化盈亏百分比"""
+        try:
+            pnl_float = float(pnl)
+            entry_price_float = float(entry_price)
+            size_float = float(size)
+            
+            if entry_price_float > 0 and size_float > 0:
+                # 计算成本
+                cost = entry_price_float * size_float
+                if cost > 0:
+                    percentage = (pnl_float / cost) * 100
+                    if percentage > 0:
+                        return cls.colorize(f"+{percentage:.2f}%", 'green')
+                    elif percentage < 0:
+                        return cls.colorize(f"{percentage:.2f}%", 'red')
+                    else:
+                        return "0.00%"
+        except (ValueError, TypeError, ZeroDivisionError):
+            pass
+        return "0.00%"
+    
+    @classmethod
+    def print_separator(cls):
+        """打印分隔线"""
+        print("=" * 120)
+    
+    @classmethod
+    def print_position_header(cls):
+        """打印持仓信息表头"""
+        headers = [
+            "交易对", "方向", "持仓量", "入场价", 
+            "杠杆倍数", "未实现盈亏", "盈亏百分比", 
+            "强平价格", "保证金模式", "更新时间"
+        ]
         
-        # 检查必要的环境变量
-        api_key = os.environ.get("WEEX_API_KEY")
-        api_secret = os.environ.get("WEEX_SECRET")
-        api_passphrase = os.environ.get("WEEX_ACCESS_PASSPHRASE")
+        # 计算列宽
+        col_widths = [len(h) for h in headers]
+        col_widths[0] = max(col_widths[0], 15)  # 交易对列宽
+        col_widths[1] = max(col_widths[1], 8)   # 方向列宽
+        col_widths[2] = max(col_widths[2], 10)  # 持仓量列宽
+        col_widths[3] = max(col_widths[3], 12)  # 入场价列宽
+        col_widths[4] = max(col_widths[4], 8)   # 杠杆倍数列宽
+        col_widths[5] = max(col_widths[5], 12)  # 未实现盈亏列宽
+        col_widths[6] = max(col_widths[6], 12)  # 盈亏百分比列宽
+        col_widths[7] = max(col_widths[7], 12)  # 强平价格列宽
+        col_widths[8] = max(col_widths[8], 12)  # 保证金模式列宽
+        col_widths[9] = max(col_widths[9], 16)  # 更新时间列宽
         
-        if not all([api_key, api_secret, api_passphrase]):
-            print("[ERROR] 缺少必要的API凭证环境变量！")
-            print("[ERROR] 请确保.env文件中设置了以下环境变量：")
-            print("[ERROR] - WEEX_API_KEY")
-            print("[ERROR] - WEEX_SECRET")
-            print("[ERROR] - WEEX_ACCESS_PASSPHRASE")
-            return None
+        # 打印表头
+        header_line = "|".join(f"{h:<{w}}".format(h, w) for h, w in zip(headers, col_widths))
+        print(f"|{header_line}|")
         
-        # 初始化客户端
-        print("[INFO] 正在初始化WeexClient...")
-        client = WeexClient(
-            api_key=api_key,
-            api_secret=api_secret,
-            api_passphrase=api_passphrase
+        # 打印表头分隔线
+        separator_line = "+".join("-" * w for w in col_widths)
+        print(f"+{separator_line}+")
+    
+    @classmethod
+    def print_position_row(cls, position):
+        """打印持仓信息行"""
+        # 格式化数据
+        symbol = position.get("symbol", "").replace("cmt_", "")
+        side = cls.colorize("做多" if position.get("side") == "long" else "做空", 
+                          "green" if position.get("side") == "long" else "red")
+        size = cls.format_position_value(position.get("size", 0))
+        entry_price = cls.format_position_value(position.get("entryPrice", 0))
+        leverage = cls.format_position_value(position.get("leverage", 1), 2)
+        unrealized_pnl = position.get("unrealizedPnl", 0)
+        pnl_formatted = cls.format_pnl(unrealized_pnl)
+        pnl_percentage = cls.format_pnl_percentage(
+            unrealized_pnl, 
+            position.get("entryPrice", 0), 
+            position.get("size", 0)
         )
+        liquidation_price = cls.format_position_value(position.get("liquidationPrice", 0))
+        margin_mode = "逐仓" if position.get("marginMode") == "isolated" else "全仓"
         
-        print("[INFO] 客户端初始化成功")
-        return client
+        # 格式化时间戳
+        timestamp = position.get("timestamp", 0)
+        try:
+            # 尝试将毫秒时间戳转换为可读时间
+            if len(str(timestamp)) > 10:
+                timestamp = timestamp / 1000  # 转换为秒
+            update_time = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            update_time = "N/A"
         
-    except Exception as e:
-        print(f"[ERROR] 初始化客户端时出错: {str(e)}")
-        return None
-
-
-def format_order_data(order):
-    """
-    格式化订单数据，使其更易读
-    
-    Args:
-        order (dict): 原始订单数据
+        # 计算列宽
+        col_widths = [15, 8, 10, 12, 8, 12, 12, 12, 12, 16]
         
-    Returns:
-        dict: 格式化后的订单数据
-    """
-    try:
-        # 尝试获取并格式化时间
-        create_time = order.get('createTime', '')
-        if create_time:
-            try:
-                # 假设时间戳是毫秒级
-                timestamp = int(create_time) / 1000 if len(create_time) > 10 else int(create_time)
-                create_time = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-            except:
-                pass
+        # 打印数据行
+        data = [symbol, side, size, entry_price, leverage, pnl_formatted, pnl_percentage, 
+                liquidation_price, margin_mode, update_time]
         
-        # 订单状态映射
-        status_map = {
-            '0': '待成交',
-            '1': '部分成交',
-            '2': '已成交',
-            '3': '已取消',
-            '4': '部分成交已取消'
-        }
+        # 确保颜色标记不会影响宽度计算
+        row_line = "|".join(f"{d:<{w}}".format(d, w) for d, w in zip(data, col_widths))
+        print(f"|{row_line}|")
+    
+    @classmethod
+    def print_position_summary(cls, positions):
+        """打印持仓汇总信息"""
+        # 计算总持仓数和总盈亏
+        total_positions = len(positions)
+        total_pnl = sum(float(p.get("unrealizedPnl", 0)) for p in positions)
         
-        # 订单类型映射
-        type_map = {
-            '1': '开多',
-            '2': '开空',
-            '3': '平多',
-            '4': '平空'
-        }
+        # 计算多头和空头持仓数
+        long_positions = sum(1 for p in positions if p.get("side") == "long")
+        short_positions = sum(1 for p in positions if p.get("side") == "short")
         
-        formatted = {
-            '订单ID': order.get('order_id', 'N/A'),
-            '交易对': order.get('symbol', 'N/A'),
-            '创建时间': create_time,
-            '订单类型': type_map.get(order.get('type', ''), order.get('type', 'N/A')),
-            '订单状态': status_map.get(order.get('status', ''), order.get('status', 'N/A')),
-            '订单数量': order.get('size', 'N/A'),
-            '已成交数量': order.get('filled_qty', 'N/A'),
-            '订单价格': order.get('price', 'N/A'),
-            '平均成交价': order.get('price_avg', 'N/A'),
-            '交易费用': order.get('fee', 'N/A'),
-            '总盈亏': order.get('totalProfits', 'N/A')
-        }
-        
-        return formatted
-    except Exception as e:
-        print(f"[ERROR] 格式化订单数据时出错: {str(e)}")
-        return order
-
-
-def display_orders(orders, verbose=False):
-    """
-    展示订单数据
+        # 打印汇总信息
+        print(f"\n持仓汇总:")
+        print(f"总持仓数量: {total_positions}")
+        print(f"多头持仓: {long_positions}")
+        print(f"空头持仓: {short_positions}")
+        print(f"总未实现盈亏: {cls.format_pnl(total_pnl)}")
     
-    Args:
-        orders (list): 订单列表
-        verbose (bool): 是否显示详细信息
-    """
-    if not orders:
-        print("[INFO] 未获取到任何历史订单")
-        return
-    
-    print(f"\n[INFO] 成功获取到 {len(orders)} 条历史订单")
-    
-    # 显示摘要信息
-    print("\n[INFO] 订单摘要:")
-    print("-" * 120)
-    print(f"{'订单ID':<20} {'交易对':<15} {'类型':<8} {'状态':<10} {'数量':<10} {'价格':<15} {'总盈亏':<15} {'创建时间':<20}")
-    print("-" * 120)
-    
-    for order in orders[:10]:  # 只显示前10条的摘要
-        formatted = format_order_data(order)
-        print(f"{formatted['订单ID'][:18]:<20} {formatted['交易对']:<15} {formatted['订单类型']:<8} "
-              f"{formatted['订单状态']:<10} {formatted['订单数量']:<10} {formatted['订单价格']:<15} "
-              f"{formatted['总盈亏']:<15} {formatted['创建时间']:<20}")
-    
-    if len(orders) > 10:
-        print(f"... 还有 {len(orders) - 10} 条订单未显示")
-    
-    print("-" * 100)
-    
-    # 如果需要详细信息，显示前3条订单的详细信息
-    if verbose and orders:
-        print("\n[INFO] 前3条订单的详细信息:")
-        for i, order in enumerate(orders[:3], 1):
-            print(f"\n订单 {i}:")
-            formatted = format_order_data(order)
-            for key, value in formatted.items():
+    @classmethod
+    def print_detailed_position_info(cls, position):
+        """打印详细的持仓信息"""
+        print(f"\n详细持仓信息 - {position.get('symbol', '').replace('cmt_', '')}:")
+        for key, value in position.items():
+            if key != 'info':  # 跳过原始信息，单独显示
                 print(f"  {key}: {value}")
-
-
-def fetch_order_history(client, symbol=None, page_size=10, create_date=None):
-    """
-    获取历史订单
-    
-    Args:
-        client (WeexClient): WeexClient实例
-        symbol (str): 交易对
-        page_size (int): 每页数量
-        create_date (int): 天数
         
-    Returns:
-        list: 订单列表
-    """
-    try:
-        print(f"\n[INFO] 正在获取历史订单...")
-        print(f"[INFO] 参数: symbol={symbol}, page_size={page_size}, create_date={create_date}")
-        
-        # 调用API获取订单
-        orders = client.get_order_history(
-            symbol=symbol,
-            page_size=page_size,
-            create_date=create_date
-        )
-        
-        return orders
-    except Exception as e:
-        print(f"[ERROR] 获取历史订单时出错: {str(e)}")
-        return []
-
-
-def parse_arguments():
-    """
-    解析命令行参数
-    
-    Returns:
-        argparse.Namespace: 解析后的参数
-    """
-    parser = argparse.ArgumentParser(description='获取Weex交易所历史订单')
-    
-    parser.add_argument('-s', '--symbol', type=str, help='交易对，例如 cmt_btcusdt')
-    parser.add_argument('-p', '--page-size', type=int, default=10, help='每页数量，默认为10')
-    parser.add_argument('-d', '--days', type=int, help='获取最近多少天的订单，最大90天')
-    parser.add_argument('-v', '--verbose', action='store_true', help='显示详细信息')
-    parser.add_argument('-o', '--output', type=str, help='输出文件路径，将订单保存为JSON文件')
-    
-    return parser.parse_args()
-
-
-def save_orders_to_file(orders, file_path):
-    """
-    保存订单到文件
-    
-    Args:
-        orders (list): 订单列表
-        file_path (str): 文件路径
-    """
-    try:
-        import json
-        
-        # 确保目录存在
-        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
-        
-        # 保存到文件
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(orders, f, ensure_ascii=False, indent=2)
-        
-        print(f"[INFO] 订单数据已保存到: {file_path}")
-        return True
-    except Exception as e:
-        print(f"[ERROR] 保存订单到文件时出错: {str(e)}")
-        return False
+        # 显示原始信息
+        if 'info' in position:
+            print(f"  原始API数据:")
+            for k, v in position['info'].items():
+                print(f"    {k}: {v}")
 
 
 def main():
-    """
-    主函数
-    """
-    print("===== Weex历史订单获取工具 =====")
-    print(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    """主函数"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='获取WEEX交易所当前持仓信息')
+    parser.add_argument('-v', '--verbose', action='store_true', 
+                        help='显示详细的持仓信息')
+    parser.add_argument('-t', '--testnet', action='store_true', 
+                        help='使用测试网络')
+    parser.add_argument('-s', '--symbol', type=str, default=None, 
+                        help='指定交易对，不指定则获取所有持仓')
+    args = parser.parse_args()
+    
+    # 从环境变量获取API配置
+    api_key = os.getenv('WEEX_API_KEY')
+    api_secret = os.getenv('WEEX_SECRET')
+    api_passphrase = os.getenv('WEEX_ACCESS_PASSPHRASE')
+    
+    # 检查环境变量是否设置
+    if not all([api_key, api_secret, api_passphrase]):
+        print(PositionDisplay.colorize("错误: 未找到API配置，请确保.env文件中有正确的环境变量设置。", "red"))
+        print("需要设置的环境变量:")
+        print("  WEEX_API_KEY")
+        print("  WEEX_SECRET")
+        print("  WEEX_ACCESS_PASSPHRASE")
+        return 1
     
     try:
-        # 解析命令行参数
-        args = parse_arguments()
+        # 初始化WeexClient
+        client = WeexClient(api_key, api_secret, api_passphrase, testnet=args.testnet)
+        print(f"已初始化WeexClient ({'测试网络' if args.testnet else '主网络'})")
         
-        # 验证参数
-        if args.days is not None:
-            if args.days < 0:
-                print("[ERROR] 天数不能为负数")
-                return 1
-            if args.days > 90:
-                print("[ERROR] 天数不能超过90天")
-                return 1
+        # 获取持仓信息
+        print(f"正在获取持仓信息{'' if args.symbol is None else f'，交易对: {args.symbol}'}...")
+        positions = client.fetch_positions(symbol=args.symbol)
+
+        print(positions)
         
-        # 初始化客户端
-        client = initialize_client()
-        if not client:
-            return 1
+        # 显示当前时间
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"查询时间: {current_time}")
+        PositionDisplay.print_separator()
         
-        # 获取历史订单
-        orders = fetch_order_history(
-            client=client,
-            symbol=args.symbol,
-            page_size=args.page_size,
-            create_date=args.days
-        )
+        if not positions:
+            print(PositionDisplay.colorize("当前没有持仓。", "yellow"))
+            return 0
         
-        # 显示订单信息
-        display_orders(orders, verbose=args.verbose)
+        # 打印持仓信息表格
+        PositionDisplay.print_position_header()
+        for position in positions:
+            PositionDisplay.print_position_row(position)
         
-        # 保存到文件（如果指定）
-        if args.output:
-            save_orders_to_file(orders, args.output)
+        # 打印表格底部边框
+        PositionDisplay.print_separator()
         
-        print(f"\n[INFO] 任务完成!")
-        print(f"结束时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        # 打印汇总信息
+        PositionDisplay.print_position_summary(positions)
+        
+        # 如果开启详细模式，显示每个持仓的详细信息
+        if args.verbose:
+            for position in positions:
+                PositionDisplay.print_detailed_position_info(position)
+        
         return 0
         
-    except KeyboardInterrupt:
-        print("\n[INFO] 用户中断操作")
-        return 1
     except Exception as e:
-        print(f"\n[ERROR] 程序运行时出错: {str(e)}")
+        print(PositionDisplay.colorize(f"获取持仓信息时发生错误: {str(e)}", "red"))
         import traceback
-        print(f"[ERROR] 错误堆栈: {traceback.format_exc()}")
+        print(f"错误堆栈: {traceback.format_exc()}")
         return 1
 
 
