@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from dotenv import load_dotenv
 from weex_sdk import WeexClient
 
@@ -64,6 +65,15 @@ def query_history_orders(symbol=None, page_size=10, create_days=7):
                 status = order.get('status', 'N/A')
                 order_type = order.get('type', 'N/A')
                 create_time = order.get('createTime', 'N/A')
+                
+                # 将时间戳转换为YYYY-MM-DD HH:mm:ss格式
+                if create_time != 'N/A':
+                    try:
+                        # 确保是整数并转换为秒
+                        timestamp = int(create_time) / 1000 if len(str(create_time)) > 10 else int(create_time)
+                        create_time = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                    except (ValueError, TypeError):
+                        pass
                 
                 # 获取盈利信息，尝试从totalProfits或其他相关字段获取
                 profit = order.get('totalProfits', 'N/A')
