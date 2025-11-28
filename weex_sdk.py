@@ -439,7 +439,7 @@ class WeexClient:
                     position = {
                         "id": pos.get("id", ""),
                         "symbol": pos.get("symbol", ""),
-                        "side": "long" if pos.get("side") == "Long" else "short",
+                        "side": "long" if pos.get("side") == "LONG" else "short",
                         "size": float(pos.get("size", 0)),
                         "entryPrice": float(pos.get("open_value", 0)) / float(pos.get("size", 1)) if float(pos.get("size", 0)) > 0 else 0,
                         "leverage": float(pos.get("leverage", 1)),
@@ -482,7 +482,7 @@ class WeexClient:
             # 1: Open long, 2: Open short, 3: Close long, 4: Close short
             if kwargs.get("reduce_only", False):
                 # 平仓订单
-                order_type = 3 if side.lower() == "sell" else 4
+                order_type = 4 if side.lower() == "sell" else 3
             else:
                 # 开仓订单
                 order_type = 1 if side.lower() == "buy" else 2
