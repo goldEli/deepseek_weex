@@ -11,7 +11,8 @@ load_dotenv()
 
 # 环境变量配置
 WEEX_API_KEY = os.getenv('WEEX_API_KEY')
-WEEX_SECRET = os.getenv('WEEX_SECRET')
+# 优先使用WEEX_API_SECRET，如果不存在则使用WEEX_SECRET作为备选
+WEEX_SECRET = os.getenv('WEEX_API_SECRET') or os.getenv('WEEX_SECRET')
 WEEX_ACCESS_PASSPHRASE = os.getenv('WEEX_ACCESS_PASSPHRASE')
 
 class WeexClient:
