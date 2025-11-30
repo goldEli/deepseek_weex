@@ -9,7 +9,6 @@
 
 import os
 import sys
-import json
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -220,41 +219,6 @@ def get_pending_orders():
         return False
 
 
-def export_orders_to_json():
-    """导出订单到JSON文件"""
-    print(f"\n{'='*80}")
-    print("💾 导出订单到JSON文件")
-    print("="*80)
-
-    try:
-        result = exchange.getCurrentPlanOrders()
-
-        if result['error']:
-            print(f"\n❌ 错误: {result['error']}")
-            return False
-
-        # 添加导出时间
-        export_data = {
-            "export_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "total_count": result['total_count'],
-            "orders": result['orders']
-        }
-
-        # 生成文件名
-        filename = f"current_plan_orders_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-
-        # 写入文件
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, indent=2, ensure_ascii=False)
-
-        print(f"\n✅ 成功导出 {result['total_count']} 条订单到文件: {filename}")
-        return True
-
-    except Exception as e:
-        print(f"\n❌ 导出订单时发生错误: {str(e)}")
-        return False
-
-
 def main():
     """主函数"""
     print("\n" + "="*80)
@@ -299,12 +263,11 @@ def main():
         print("1. 查询特定交易对 (BTC/USDT)")
         print("2. 查看设置了止盈止损的订单")
         print("3. 查看待成交订单")
-        print("4. 导出订单到JSON文件")
-        print("5. 退出")
+        print("4. 退出")
         print()
 
         while True:
-            choice = input("请选择操作 (1-5): ").strip()
+            choice = input("请选择操作 (1-4): ").strip()
 
             if choice == '1':
                 symbol = input("请输入交易对 (例如: cmt_btcusdt): ").strip()
@@ -315,12 +278,10 @@ def main():
             elif choice == '3':
                 get_pending_orders()
             elif choice == '4':
-                export_orders_to_json()
-            elif choice == '5':
                 print("\n👋 感谢使用!")
                 break
             else:
-                print("❌ 无效选择，请输入 1-5")
+                print("❌ 无效选择，请输入 1-4")
 
     print("\n" + "="*80)
     print("✨ 程序结束")
