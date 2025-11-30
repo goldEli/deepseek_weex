@@ -692,12 +692,228 @@ class WeexClient:
             print(f"错误堆栈: {traceback.format_exc()}")
             # 返回空的订单列表和错误信息
             return {
-                "orders": [], 
+                "orders": [],
                 "has_more": False,
                 "error": f"未知错误: {str(e)}",
                 "error_code": "UNKNOWN_ERROR"
             }
-    
+
+    def getCurrentPlanOrders(self, symbol=None, orderId=None, startTime=None, endTime=None, limit=None, page=None):
+        """
+        获取当前计划订单列表
+        参考文档: GET /capi/v2/order/currentPlan
+
+        Args:
+            symbol (str, optional): 交易对，例如 "cmt_bchusdt"
+            orderId (int, optional): 订单ID
+            startTime (int, optional): 开始时间戳
+            endTime (int, optional): 结束时间戳
+            limit (int, optional): 限制数量，默认100，最大100
+            page (int, optional): 页码，默认0
+
+        Returns:
+            dict: 格式化后的当前计划订单信息，包含orders字段（处理后的订单列表）和has_more字段，以及error信息
+        """
+        # 验证可选参数类型
+        if orderId is not None and not isinstance(orderId, int):
+            print("错误: orderId参数必须是整数类型")
+            return {
+                "orders": [],
+                "has_more": False,
+                "error": "orderId参数类型无效",
+                "error_code": "INVALID_PARAMETER"
+            }
+
+        if startTime is not None and not isinstance(startTime, int):
+            print("错误: startTime参数必须是整数类型")
+            return {
+                "orders": [],
+                "has_more": False,
+                "error": "startTime参数类型无效",
+                "error_code": "INVALID_PARAMETER"
+            }
+
+        if endTime is not None and not isinstance(endTime, int):
+            print("错误: endTime参数必须是整数类型")
+            return {
+                "orders": [],
+                "has_more": False,
+                "error": "endTime参数类型无效",
+                "error_code": "INVALID_PARAMETER"
+            }
+
+        if limit is not None:
+            if not isinstance(limit, int) or limit <= 0:
+                print(f"错误: limit参数必须是正整数，当前值: {limit}")
+                return {
+                    "orders": [],
+                    "has_more": False,
+                    "error": "limit参数无效，必须是正整数",
+                    "error_code": "INVALID_PARAMETER"
+                }
+            # 限制limit最大值，避免请求过多数据
+            if limit > 100:
+                print(f"警告: limit({limit})超过最大限制，将调整为100")
+                limit = 100
+
+        if page is not None:
+            if not isinstance(page, int) or page < 0:
+                print(f"错误: page参数必须是非负整数，当前值: {page}")
+                return {
+                    "orders": [],
+                    "has_more": False,
+                    "error": "page参数无效，必须是非负整数",
+                    "error_code": "INVALID_PARAMETER"
+                }
+
+        try:
+            # 设置API路径
+            request_path = "/capi/v2/order/currentPlan"
+
+            # 构建查询参数
+            params = {}
+
+            # 添加可选参数
+            if symbol is not None:
+                params["symbol"] = symbol
+            if orderId is not None:
+                params["orderId"] = orderId
+            if startTime is not None:
+                params["startTime"] = startTime
+            if endTime is not None:
+                params["endTime"] = endTime
+            if limit is not None:
+                params["limit"] = limit
+            if page is not None:
+                params["page"] = page
+
+            # 发送GET请求，需要签名
+            print(f"尝试获取当前计划订单")
+            custom_headers = {
+                "locale": "zh-CN",
+                "Content-Type": "application/json"
+            }
+
+            # 发送请求并处理网络错误
+            try:
+                response = self._request("GET", request_path, params=params, need_sign=True, headers=custom_headers)
+            except requests.RequestException as req_error:
+                print(f"网络请求错误: {str(req_error)}")
+                return {
+                    "orders": [],
+                    "has_more": False,
+                    "error": f"网络请求失败: {str(req_error)}",
+                    "error_code": "NETWORK_ERROR"
+                }
+
+            # 检查响应是否有效
+            if not isinstance(response, list):
+                print(f"无效的响应格式: {type(response)}")
+                return {
+                    "orders": [],
+                    "has_more": False,
+                    "error": "API返回的响应格式无效",
+                    "error_code": "INVALID_RESPONSE"
+                }
+
+            # 解析和格式化订单列表
+            formatted_orders = []
+
+            # 订单类型映射 (API返回英文字符串)
+            order_type_map = {
+                "OPEN_LONG": "开多",
+                "OPEN_SHORT": "开空",
+                "CLOSE_LONG": "平多",
+                "CLOSE_SHORT": "平空",
+                "PARTIAL_CLOSE_LONG": "部分平多",
+                "PARTIAL_CLOSE_SHORT": "部分平空",
+                "AUTO_DELEVERAGING_CLOSE_LONG": "自动减仓(平多)",
+                "AUTO_DELEVERAGING_CLOSE_SHORT": "自动减仓(平空)",
+                "LIQUIDATION_CLOSE_LONG": "强平(平多)",
+                "LIQUIDATION_CLOSE_SHORT": "强平(平空)"
+            }
+
+            # 订单状态映射 (API返回英文字符串)
+            status_map = {
+                "CANCELED": "已取消",
+                "UNTRIGGERED": "未触发",
+                "PENDING": "待成交",
+                "PARTIALLY_FILLED": "部分成交",
+                "FILLED": "已成交"
+            }
+
+            # 订单类型映射 (order_type字段，API返回英文字符串)
+            order_type_detail_map = {
+                "NORMAL": "普通订单",
+                "POST_ONLY": "只做 maker",
+                "FILL_OR_KILL": "Fill-Or-Kill",
+                "IMMEDIATE_OR_CANCEL": "Immediate-Or-Cancel"
+            }
+
+            # 格式化每个订单
+            try:
+                for order in response:
+                    if isinstance(order, dict):
+                        formatted_order = {
+                            "symbol": order.get("symbol", ""),
+                            "size": float(order.get("size", 0.0)),
+                            "client_oid": order.get("client_oid", ""),
+                            "create_time": order.get("createTime", ""),
+                            "filled_qty": float(order.get("filled_qty", 0.0)),
+                            "fee": float(order.get("fee", 0.0)),
+                            "order_id": order.get("order_id", ""),
+                            "price": float(order.get("price", 0.0)),
+                            "price_avg": float(order.get("price_avg", 0.0)) if order.get("price_avg") else None,
+                            "status": status_map.get(order.get("status"), "未知"),
+                            "status_code": order.get("status"),
+                            "type": order_type_map.get(order.get("type"), "未知"),
+                            "type_code": order.get("type"),
+                            "order_type": order_type_detail_map.get(order.get("order_type"), "未知"),
+                            "order_type_code": order.get("order_type"),
+                            "totalProfits": float(order.get("totalProfits", 0.0)),
+                            "triggerPrice": float(order.get("triggerPrice", 0.0)) if order.get("triggerPrice") else None,
+                            "triggerPriceType": order.get("triggerPriceType", ""),
+                            "triggerTime": order.get("triggerTime", ""),
+                            "presetTakeProfitPrice": float(order.get("presetTakeProfitPrice", 0.0)) if order.get("presetTakeProfitPrice") else None,
+                            "presetStopLossPrice": float(order.get("presetStopLossPrice", 0.0)) if order.get("presetStopLossPrice") else None
+                        }
+
+                        # 计算订单金额（用于展示）
+                        try:
+                            formatted_order["order_value"] = round(formatted_order["price"] * formatted_order["size"], 8)
+                        except (TypeError, ValueError):
+                            formatted_order["order_value"] = 0.0
+
+                        formatted_orders.append(formatted_order)
+            except Exception as parse_error:
+                print(f"订单数据解析错误: {str(parse_error)}")
+                # 即使部分数据解析失败，也返回已成功解析的订单
+                print(f"已成功解析 {len(formatted_orders)} 条订单数据")
+
+            # 构建返回结果
+            result = {
+                "orders": formatted_orders,
+                "has_more": False,  # currentPlan API无has_more字段
+                "total_count": len(formatted_orders),
+                "error": None,
+                "error_code": None
+            }
+
+            print(f"成功获取并格式化 {len(formatted_orders)} 条当前计划订单记录")
+            return result
+
+        except Exception as e:
+            print(f"获取当前计划订单时发生未知错误: {str(e)}")
+            import traceback
+            print(f"错误堆栈: {traceback.format_exc()}")
+            # 返回空的订单列表和错误信息
+            return {
+                "orders": [],
+                "has_more": False,
+                "error": f"未知错误: {str(e)}",
+                "error_code": "UNKNOWN_ERROR"
+            }
+
     def fetch_ohlcv(self, symbol, timeframe, since=None, limit=100):
         """
         获取K线数据
