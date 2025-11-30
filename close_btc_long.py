@@ -99,7 +99,7 @@ def close_long_position(client, symbol, size):
         order_result = client.create_market_order(
             symbol=symbol,
             side='sell',
-            amount=size,
+            amount='0.03',
             reduce_only=True  # 平仓订单
         )
         
@@ -196,19 +196,19 @@ def main():
         client = initialize_client(api_key, api_secret, api_passphrase)
         
         # 步骤3: 查询多头持仓
-        long_position = get_long_position(client, symbol)
-        if not long_position:
-            print("未找到可平的多头持仓，脚本终止")
-            sys.exit(1)
+        # long_position = get_long_position(client, symbol)
+        # if not long_position:
+        #     print("未找到可平的多头持仓，脚本终止")
+        #     sys.exit(1)
         
         # 验证持仓大小
-        position_size = float(long_position.get('size', 0))
-        if position_size <= 0:
-            print(f"错误: 持仓数量无效: {position_size}")
-            sys.exit(1)
+        # position_size = float(long_position.get('size', 0))
+        # if position_size <= 0:
+        #     print(f"错误: 持仓数量无效: {position_size}")
+        #     sys.exit(1)
         
         # 步骤4: 平仓
-        order_result = close_long_position(client, symbol, position_size)
+        order_result = close_long_position(client, symbol, "0.03")
         if not order_result:
             print("平仓失败，脚本终止")
             sys.exit(1)
