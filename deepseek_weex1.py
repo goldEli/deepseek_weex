@@ -73,7 +73,7 @@ def get_btc_ohlcv():
     """获取BTC/USDT的K线数据"""
     try:
         # 获取最近10根K线 - 使用我们的fetch_ohlcv方法
-        ohlcv = exchange.fetch_ohlcv(TRADE_CONFIG['symbol'], TRADE_CONFIG['timeframe'], limit=10)
+        ohlcv = exchange.fetch_ohlcv(TRADE_CONFIG['symbol'], TRADE_CONFIG['timeframe'], limit=36)
 
         # 转换为DataFrame
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
