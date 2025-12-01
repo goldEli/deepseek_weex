@@ -79,6 +79,9 @@ def get_btc_ohlcv():
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
 
+         # sort by timestamp
+        df = df.sort_values(by='timestamp')
+
         current_data = df.iloc[-1]
         previous_data = df.iloc[-2] if len(df) > 1 else current_data
 
