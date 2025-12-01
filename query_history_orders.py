@@ -125,7 +125,7 @@ if __name__ == "__main__":
     choice = input("\n请选择查询类型 (1-3): ").strip()
     
     if choice == "1":
-        query_history_orders(symbol="cmt_btcusdt", page_size=10, create_days=7)
+        query_history_orders(symbol="cmt_btcusdt", page_size=100, create_days=7)
     elif choice == "2":
         query_history_orders(symbol=None, page_size=20, create_days=1)
     elif choice == "3":
