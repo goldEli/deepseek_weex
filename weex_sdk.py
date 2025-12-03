@@ -79,7 +79,7 @@ class WeexClient:
             body = json.dumps(data) if data else ''
             message = timestamp + method.upper() + request_path + query_string + body
         
-        print(f"签名消息: {message}")  # 调试信息
+        # print(f"签名消息: {message}")  # 调试信息
         
         # 使用HMAC-SHA256算法生成签名
         signature = hmac.new(
@@ -90,7 +90,7 @@ class WeexClient:
         
         # 按照官方文档要求进行BASE64编码
         signature_b64 = base64.b64encode(signature).decode('utf-8')
-        print(f"生成的签名: {signature_b64}")  # 调试信息
+        # print(f"生成的签名: {signature_b64}")  # 调试信息
         
         return signature_b64
     
