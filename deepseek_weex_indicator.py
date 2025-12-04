@@ -36,14 +36,14 @@ TRADE_CONFIG = {
     'symbol': 'cmt_btcusdt',  # WEEX的合约符号格式
     'amount': 0.03,  # 交易数量 (BTC)
     'leverage': 10,  # 杠杆倍数
-    'timeframe': '15m',  # 使用15分钟K线
+    'timeframe': '5m',  # 使用5分钟K线
     # 'test_mode': True,  # 测试模式
     'test_mode': False,  # 测试模式
     'data_points': 96,  # 获取的K线数据点数量（96个15分钟K线对应24小时）
     'analysis_periods': {
         'short_term': 20,  # 短期均线周期
         'medium_term': 50,  # 中期均线周期
-        'long_term': 96,  # 长期均线周期（对应24小时）
+        'long_term': 96,  # 长期均线周期（对应8小时）
     }
 }
 
@@ -607,6 +607,9 @@ def main():
     elif TRADE_CONFIG['timeframe'] == '15m':
         schedule.every(15).minutes.do(trading_bot)
         print("执行频率: 每15分钟一次")
+    elif TRADE_CONFIG['timeframe'] == '5m':
+        schedule.every(5).minutes.do(trading_bot)
+        print("执行频率: 每5分钟一次")
     else:
         schedule.every().hour.at(":01").do(trading_bot)
         print("执行频率: 每小时一次")
