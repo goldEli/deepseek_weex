@@ -3,7 +3,8 @@ import time
 import schedule
 from openai import OpenAI
 import pandas as pd
-from datetime import datetime
+import requests
+from datetime import datetime, timedelta
 import json
 from dotenv import load_dotenv
 
@@ -36,14 +37,14 @@ TRADE_CONFIG = {
     'symbol': 'cmt_btcusdt',  # WEEX的合约符号格式
     'amount': 0.03,  # 交易数量 (BTC)
     'leverage': 10,  # 杠杆倍数
-    'timeframe': '5m',  # 使用5分钟K线
+    'timeframe': '15m',  # 使用15分钟K线
     # 'test_mode': True,  # 测试模式
     'test_mode': False,  # 测试模式
     'data_points': 96,  # 获取的K线数据点数量（96个15分钟K线对应24小时）
     'analysis_periods': {
         'short_term': 20,  # 短期均线周期
         'medium_term': 50,  # 中期均线周期
-        'long_term': 96,  # 长期均线周期（对应8小时）
+        'long_term': 96,  # 长期均线周期（对应24小时）
     }
 }
 
@@ -308,6 +309,81 @@ def get_current_position():
         return None
 
 
+def get_sentiment_indicators():
+    """获取情绪指标 - 简洁版本"""
+    try:
+        API_URL = "https://service.cryptoracle.network/openapi/v2/endpoint"
+        API_KEY = "7ad48a56-8730-4238-a714-eebc30834e3e"
+
+        # 获取最近4小时数据
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=4)
+
+        request_body = {
+            "apiKey": API_KEY,
+            "endpoints": ["CO-A-02-01", "CO-A-02-02"],  # 只保留核心指标
+            "startTime": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "endTime": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "timeType": "15m",
+            "token": ["BTC"]
+        }
+
+        headers = {"Content-Type": "application/json", "X-API-KEY": API_KEY}
+        response = requests.post(API_URL, json=request_body, headers=headers)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 200 and data.get("data"):
+                time_periods = data["data"][0]["timePeriods"]
+
+                # 查找第一个有有效数据的时间段
+                for period in time_periods:
+                    period_data = period.get("data", [])
+
+                    sentiment = {}
+                    valid_data_found = False
+
+                    for item in period_data:
+                        endpoint = item.get("endpoint")
+                        value = item.get("value", "").strip()
+
+                        if value:  # 只处理非空值
+                            try:
+                                if endpoint in ["CO-A-02-01", "CO-A-02-02"]:
+                                    sentiment[endpoint] = float(value)
+                                    valid_data_found = True
+                            except (ValueError, TypeError):
+                                continue
+
+                    # 如果找到有效数据
+                    if valid_data_found and "CO-A-02-01" in sentiment and "CO-A-02-02" in sentiment:
+                        positive = sentiment['CO-A-02-01']
+                        negative = sentiment['CO-A-02-02']
+                        net_sentiment = positive - negative
+
+                        # 正确的时间延迟计算
+                        data_delay = int((datetime.now() - datetime.strptime(
+                            period['startTime'], '%Y-%m-%d %H:%M:%S')).total_seconds() // 60)
+
+                        print(f"✅ 使用情绪数据时间: {period['startTime']} (延迟: {data_delay}分钟)")
+
+                        return {
+                            'positive_ratio': positive,
+                            'negative_ratio': negative,
+                            'net_sentiment': net_sentiment,
+                            'data_time': period['startTime'],
+                            'data_delay_minutes': data_delay
+                        }
+
+                print("❌ 所有时间段数据都为空")
+                return None
+
+        return None
+    except Exception as e:
+        print(f"情绪指标获取失败: {e}")
+        return None
+
+
 def analyze_with_deepseek(price_data):
     """使用DeepSeek分析市场并生成交易信号"""
 
@@ -319,7 +395,7 @@ def analyze_with_deepseek(price_data):
     # 生成技术分析文本
     technical_analysis = generate_technical_analysis_text(price_data)
 
-    print(f"技术分析:\n{technical_analysis}")
+    # print(f"技术分析:\n{technical_analysis}")
 
     # 构建K线数据文本
     kline_text = f"【最近5根{TRADE_CONFIG['timeframe']}K线数据】\n"
@@ -337,6 +413,23 @@ def analyze_with_deepseek(price_data):
     # 添加当前持仓信息
     current_pos = get_current_position()
     position_text = "无持仓" if not current_pos else f"{current_pos['side']}仓, 数量: {current_pos['size']}, 盈亏: {current_pos['unrealized_pnl']:.2f}USDT"
+    
+    # 获取情绪数据
+    sentiment_data = get_sentiment_indicators()
+    # 简化情绪文本
+    if sentiment_data:
+        sign = '+' if sentiment_data['net_sentiment'] >= 0 else ''
+        sentiment_text = f"【市场情绪】乐观{sentiment_data['positive_ratio']:.1%} 悲观{sentiment_data['negative_ratio']:.1%} 净值{sign}{sentiment_data['net_sentiment']:.3f}"
+    else:
+        sentiment_text = "【市场情绪】数据暂不可用"
+
+
+    print(f"K线数据:\n{kline_text}")
+    print(f"技术分析:\n{technical_analysis}")
+    print(f"上次交易信号:\n{signal_text}")
+    print(f"情绪数据: {sentiment_text}")
+
+
 
     prompt = f"""
     你是一个专业的加密货币交易分析师。请基于以下BTC/USDT {TRADE_CONFIG['timeframe']}周期数据进行分析：
@@ -346,6 +439,8 @@ def analyze_with_deepseek(price_data):
     {technical_analysis}
 
     {signal_text}
+
+    {sentiment_text}  # 添加情绪分析
 
     【当前行情】
     - 当前价格: ${price_data['price']:,.2f}
@@ -363,13 +458,19 @@ def analyze_with_deepseek(price_data):
     4. **成本意识**: 减少不必要的仓位调整，每次交易都有成本
 
     【交易指导原则 - 必须遵守】
-    1. **趋势跟随**: 明确趋势出现时立即行动，不要过度等待
-    2. 因为做的是btc，做多权重可以大一点点
-    3. **信号明确性**:
+    1. **技术分析主导** (权重60%)：趋势、支撑阻力、K线形态是主要依据
+    2. **市场情绪辅助** (权重30%)：情绪数据用于验证技术信号，不能单独作为交易理由  
+    - 情绪与技术同向 → 增强信号信心
+    - 情绪与技术背离 → 以技术分析为主，情绪仅作参考
+    - 情绪数据延迟 → 降低权重，以实时技术指标为准
+    3. **风险管理** (权重10%)：考虑持仓、盈亏状况和止损位置
+    4. **趋势跟随**: 明确趋势出现时立即行动，不要过度等待
+    5. 因为做的是btc，做多权重可以大一点点
+    6. **信号明确性**:
     - 强势上涨趋势 → BUY信号
     - 强势下跌趋势 → SELL信号  
     - 仅在窄幅震荡、无明确方向时 → HOLD信号
-    4. **技术指标权重**:
+    7. **技术指标权重**:
     - 趋势(均线排列) > RSI > MACD > 布林带
     - 价格突破关键支撑/阻力位是重要信号
 
@@ -391,6 +492,7 @@ def analyze_with_deepseek(price_data):
         "confidence": "HIGH|MEDIUM|LOW"
     }}
     """
+
 
     try:
         response = deepseek_client.chat.completions.create(
