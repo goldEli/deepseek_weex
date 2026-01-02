@@ -240,8 +240,8 @@ def execute_trade(signal_data, price_data):
     print(f"交易信号: {signal_data['signal']}")
     print(f"信心程度: {signal_data['confidence']}")
     print(f"理由: {signal_data['reason']}")
-    print(f"止损: ${signal_data['stop_loss']:,.2f}")
-    print(f"止盈: ${signal_data['take_profit']:,.2f}")
+    # print(f"止损: ${signal_data['stop_loss']:,.2f}")
+    # print(f"止盈: ${signal_data['take_profit']:,.2f}")
     print(f"当前持仓: {current_position}")
 
     if TRADE_CONFIG['test_mode']:
@@ -260,24 +260,24 @@ def execute_trade(signal_data, price_data):
                     reduce_only=True  # 使用reduce_only参数表示平仓
                 )
                 time.sleep(1)
-                # 开多仓并设置止盈止损
-                print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
+                # 开多仓（不设置止盈止损）
+                # print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'buy',
-                    TRADE_CONFIG['amount'],
-                    presetStopLossPrice=str(signal_data['stop_loss']),
-                    presetTakeProfitPrice=str(signal_data['take_profit'])
+                    TRADE_CONFIG['amount']
+                    # presetStopLossPrice=str(signal_data['stop_loss']),
+                    # presetTakeProfitPrice=str(signal_data['take_profit'])
                 )
             elif not current_position:
                 print("开多仓...")
-                print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
+                # print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'buy',
-                    TRADE_CONFIG['amount'],
-                    presetStopLossPrice=str(signal_data['stop_loss']),
-                    presetTakeProfitPrice=str(signal_data['take_profit'])
+                    TRADE_CONFIG['amount']
+                    # presetStopLossPrice=str(signal_data['stop_loss']),
+                    # presetTakeProfitPrice=str(signal_data['take_profit'])
                 )
             else:
                 print("已持有多仓，无需操作")
@@ -293,24 +293,24 @@ def execute_trade(signal_data, price_data):
                     reduce_only=True  # 使用reduce_only参数表示平仓
                 )
                 time.sleep(1)
-                # 开空仓并设置止盈止损
-                print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
+                # 开空仓（不设置止盈止损）
+                # print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'sell',
-                    TRADE_CONFIG['amount'],
-                    presetStopLossPrice=str(signal_data['stop_loss']),
-                    presetTakeProfitPrice=str(signal_data['take_profit'])
+                    TRADE_CONFIG['amount']
+                    # presetStopLossPrice=str(signal_data['stop_loss']),
+                    # presetTakeProfitPrice=str(signal_data['take_profit'])
                 )
             elif not current_position:
                 print("开空仓...")
-                print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
+                # print(f"设置止损: ${signal_data['stop_loss']:,.2f}, 止盈: ${signal_data['take_profit']:,.2f}")
                 exchange.create_market_order(
                     TRADE_CONFIG['symbol'],
                     'sell',
-                    TRADE_CONFIG['amount'],
-                    presetStopLossPrice=str(signal_data['stop_loss']),
-                    presetTakeProfitPrice=str(signal_data['take_profit'])
+                    TRADE_CONFIG['amount']
+                    # presetStopLossPrice=str(signal_data['stop_loss']),
+                    # presetTakeProfitPrice=str(signal_data['take_profit'])
                 )
             else:
                 print("已持有空仓，无需操作")
